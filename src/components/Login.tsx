@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaSeedling, FaUser, FaLock } from 'react-icons/fa';
+import { FaSeedling, FaUser, FaLock, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 
 const Login: React.FC = () => {
@@ -8,6 +8,7 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { login, user } = useAuth();
   const navigate = useNavigate();
 
@@ -34,7 +35,7 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center p-4 overflow-y-auto">
+    <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 flex items-start justify-center p-4 overflow-y-auto pt-[10vh]">
       <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 w-full max-w-md my-4">
         <div className="text-center mb-6 sm:mb-8">
           <div className="flex justify-center mb-4">
@@ -50,7 +51,7 @@ const Login: React.FC = () => {
               Tên đăng nhập
             </label>
             <div className="relative">
-              <FaUser className="absolute left-3 top-3 text-gray-400" />
+              <FaUser className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 value={username}
@@ -67,15 +68,22 @@ const Login: React.FC = () => {
               Mật khẩu
             </label>
             <div className="relative">
-              <FaLock className="absolute left-3 top-3 text-gray-400" />
+              <FaLock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 placeholder="Nhập mật khẩu"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
             </div>
           </div>
 

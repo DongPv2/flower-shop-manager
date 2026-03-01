@@ -26,10 +26,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
+      // Convert both to lowercase for case-insensitive comparison
+      const lowerUsername = username.toLowerCase();
+      const lowerPassword = password.toLowerCase();
+
       const result = await sql`
         SELECT id, username, name, role, created_at
         FROM users
-        WHERE BINARY username = ${username} AND BINARY password_hash = ${password}
+        WHERE LOWER(username) = ${lowerUsername} AND LOWER(password_hash) = ${lowerPassword}
       `;
 
       if (result.length > 0) {
