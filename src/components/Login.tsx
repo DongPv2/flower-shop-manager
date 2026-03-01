@@ -34,17 +34,17 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 w-full max-w-md my-4">
+        <div className="text-center mb-6 sm:mb-8">
           <div className="flex justify-center mb-4">
-            <FaSeedling className="text-5xl text-pink-500" />
+            <FaSeedling className="text-4xl sm:text-5xl text-pink-500" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">Tiệm hoa mặt trời nhỏ</h1>
-          <p className="text-gray-600 mt-2">Flower Shop Manager</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Tiệm hoa mặt trời nhỏ</h1>
+          <p className="text-gray-600 mt-2 text-sm sm:text-base">Flower Shop Manager</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Tên đăng nhập
@@ -93,10 +93,6 @@ const Login: React.FC = () => {
             {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
           </button>
         </form>
-
-        <div className="mt-6 text-center text-sm text-gray-500">
-          <p>Mặc định: admin / admin123</p>
-        </div>
       </div>
     </div>
   );

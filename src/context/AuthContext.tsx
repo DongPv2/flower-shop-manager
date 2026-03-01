@@ -29,7 +29,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const result = await sql`
         SELECT id, username, name, role, created_at
         FROM users
-        WHERE username = ${username} AND password_hash = ${password}
+        WHERE BINARY username = ${username} AND BINARY password_hash = ${password}
       `;
 
       if (result.length > 0) {

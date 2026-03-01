@@ -1,6 +1,8 @@
 import { neon } from '@neondatabase/serverless';
 
-const sql = neon(process.env.REACT_APP_NEON_DATABASE_URL || '');
+const sql = neon(process.env.REACT_APP_NEON_DATABASE_URL || '', {
+  disableWarningInBrowsers: true
+});
 
 export { sql };
 
@@ -57,4 +59,15 @@ export const createTables = async () => {
     console.error('Error creating tables:', error);
     throw error;
   }
+};
+
+// Basic input validation
+export const validateInput = (input: string, maxLength: number = 255): string => {
+  if (typeof input !== 'string') return '';
+  return input.trim().slice(0, maxLength);
+};
+
+export const validateNumber = (input: string): number => {
+  const num = parseFloat(input);
+  return isNaN(num) ? 0 : Math.max(0, num);
 };

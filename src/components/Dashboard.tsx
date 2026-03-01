@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaMoneyBillWave, FaChartLine, FaShoppingCart, FaSignOutAlt } from 'react-icons/fa';
+import { FaMoneyBillWave, FaChartLine, FaShoppingCart, FaPlus, FaSignOutAlt, FaUsers } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import { Expense, Revenue } from '../types';
 import { sql } from '../lib/database';
 import ExpenseManager from './ExpenseManager';
 import RevenueManager from './RevenueManager';
+import UserManager from './UserManager';
 
 const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [revenues, setRevenues] = useState<Revenue[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'expenses' | 'revenues'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'expenses' | 'revenues' | 'users'>('dashboard');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -170,6 +171,18 @@ const Dashboard: React.FC = () => {
           >
             Doanh thu
           </button>
+          {user?.role === 'admin' && (
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`flex-1 py-2 px-4 rounded-md transition ${activeTab === 'users'
+                ? 'bg-pink-500 text-white'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
+            >
+              <FaUsers className="inline mr-2" />
+              Tài khoản
+            </button>
+          )}
         </div>
 
         {isLoading ? (
@@ -181,6 +194,7 @@ const Dashboard: React.FC = () => {
             {activeTab === 'dashboard' && <DashboardView />}
             {activeTab === 'expenses' && <ExpenseManager />}
             {activeTab === 'revenues' && <RevenueManager />}
+            {activeTab === 'users' && <UserManager />}
           </>
         )}
       </div>
