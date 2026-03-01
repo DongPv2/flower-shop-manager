@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaSeedling, FaUser, FaLock, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { login, user } = useAuth();
@@ -20,15 +21,14 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setIsLoading(true);
 
     const success = await login(username, password);
-
     if (success) {
+      toast.success('Đăng nhập thành công! 🎉');
       navigate('/dashboard');
     } else {
-      setError('Tên đăng nhập hoặc mật khẩu không đúng');
+      toast.error('Tên đăng nhập hoặc mật khẩu không đúng ❌');
     }
 
     setIsLoading(false);
@@ -87,12 +87,6 @@ const Login: React.FC = () => {
             </div>
           </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-              {error}
-            </div>
-          )}
-
           <button
             type="submit"
             disabled={isLoading}
@@ -102,6 +96,18 @@ const Login: React.FC = () => {
           </button>
         </form>
       </div>
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+      />
     </div>
   );
 };

@@ -3,6 +3,10 @@ import { FaPlus, FaTrash, FaEdit, FaChartLine } from 'react-icons/fa';
 import { Revenue } from '../types';
 import { sql } from '../lib/database';
 import { useAuth } from '../context/AuthContext';
+import { toast, ToastContainer } from 'react-toastify';
+import Swal from 'sweetalert2';
+import 'react-toastify/dist/ReactToastify.css';
+import 'sweetalert2/dist/sweetalert2.css';
 
 const RevenueManager: React.FC = () => {
   const { user } = useAuth();
@@ -23,8 +27,13 @@ const RevenueManager: React.FC = () => {
 
   const fetchRevenues = async () => {
     try {
-      const result = await sql`SELECT * FROM revenues ORDER BY date DESC`;
-      setRevenues(result as Revenue[]);
+      const result = await sql`
+        SELECT r.*, u.name as user_name
+        FROM revenues r
+        LEFT JOIN users u ON r.user_id = u.id
+        ORDER BY r.created_at DESC
+      `;
+      setRevenues(result as any[]);
     } catch (error) {
       console.error('Error fetching revenues:', error);
     } finally {
@@ -66,6 +75,11 @@ const RevenueManager: React.FC = () => {
   };
 
   const handleEdit = (revenue: Revenue) => {
+    // Only allow editing if user created this revenue or is admin
+    if (revenue.user_id !== user?.id && user?.role !== 'admin') {
+      alert('Bạn không có quyền sửa doanh thu này');
+      return;
+    }
     setEditingRevenue(revenue);
     setFormData({
       amount: revenue.amount.toString(),
@@ -77,14 +91,37 @@ const RevenueManager: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa khoản doanh thu này?')) {
-      try {
-        await sql`DELETE FROM revenues WHERE id = ${id}`;
-        fetchRevenues();
-      } catch (error) {
-        console.error('Error deleting revenue:', error);
-      }
+    // Find the revenue to check ownership
+    const revenue = revenues.find(r => r.id === id);
+    if (!revenue) return;
+
+    // Only allow deleting if user created this revenue or is admin
+    if (revenue.user_id !== user?.id && user?.role !== 'admin') {
+      toast.error('Bạn không có quyền xóa doanh thu này ❌');
+      return;
     }
+
+    Swal.fire({
+      title: 'Xác nhận xóa',
+      text: "Bạn có chắc chắn muốn xóa doanh thu này không?",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Xóa',
+      cancelButtonText: 'Hủy'
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          await sql`DELETE FROM revenues WHERE id = ${id}`;
+          fetchRevenues();
+          toast.success('Xóa doanh thu thành công! 🗑️');
+        } catch (error) {
+          console.error('Error deleting revenue:', error);
+          toast.error('Lỗi khi xóa doanh thu. Vui lòng thử lại. ❌');
+        }
+      }
+    });
   };
 
   const resetForm = () => {
@@ -228,6 +265,9 @@ const RevenueManager: React.FC = () => {
                   Số tiền
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Người tạo
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Thao tác
                 </th>
               </tr>
@@ -249,17 +289,22 @@ const RevenueManager: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                     {Number(revenue.amount).toLocaleString('vi-VN')}₫
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {(revenue as any).user_name || 'Unknown'}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleEdit(revenue)}
                         className="text-blue-600 hover:text-blue-800"
+                        title="Sửa"
                       >
                         <FaEdit />
                       </button>
                       <button
                         onClick={() => handleDelete(revenue.id)}
                         className="text-red-600 hover:text-red-800"
+                        title="Xóa"
                       >
                         <FaTrash />
                       </button>

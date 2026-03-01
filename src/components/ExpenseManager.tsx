@@ -3,6 +3,10 @@ import { FaPlus, FaTrash, FaEdit, FaMoneyBillWave } from 'react-icons/fa';
 import { Expense } from '../types';
 import { sql } from '../lib/database';
 import { useAuth } from '../context/AuthContext';
+import { toast, ToastContainer } from 'react-toastify';
+import Swal from 'sweetalert2';
+import 'react-toastify/dist/ReactToastify.css';
+import 'sweetalert2/dist/sweetalert2.css';
 
 const ExpenseManager: React.FC = () => {
   const { user } = useAuth();
@@ -32,8 +36,13 @@ const ExpenseManager: React.FC = () => {
 
   const fetchExpenses = async () => {
     try {
-      const result = await sql`SELECT * FROM expenses ORDER BY date DESC`;
-      setExpenses(result as Expense[]);
+      const result = await sql`
+        SELECT e.*, u.name as user_name
+        FROM expenses e
+        LEFT JOIN users u ON e.user_id = u.id
+        ORDER BY e.created_at DESC
+      `;
+      setExpenses(result as any[]);
     } catch (error) {
       console.error('Error fetching expenses:', error);
     } finally {
@@ -45,7 +54,7 @@ const ExpenseManager: React.FC = () => {
     e.preventDefault();
 
     if (!user) {
-      alert('Bạn cần đăng nhập để thực hiện thao tác này');
+      toast.error('Bạn cần đăng nhập để thực hiện thao tác này ❌');
       return;
     }
 
@@ -59,22 +68,29 @@ const ExpenseManager: React.FC = () => {
               date = ${formData.date}
           WHERE id = ${editingExpense.id}
         `;
+        toast.success('Cập nhật chi tiêu thành công! ✏️');
       } else {
         await sql`
           INSERT INTO expenses (amount, category, description, date, user_id)
           VALUES (${Number(formData.amount)}, ${formData.category}, ${formData.description}, ${formData.date}, ${user.id})
         `;
+        toast.success('Thêm chi tiêu thành công! 💰');
       }
 
       fetchExpenses();
       resetForm();
     } catch (error) {
       console.error('Error saving expense:', error);
-      alert('Lỗi khi lưu chi tiêu. Vui lòng thử lại.');
+      toast.error('Lỗi khi lưu chi tiêu. Vui lòng thử lại. ❌');
     }
   };
 
   const handleEdit = (expense: Expense) => {
+    // Only allow editing if user created this expense or is admin
+    if (expense.user_id !== user?.id && user?.role !== 'admin') {
+      toast.error('Bạn không có quyền sửa chi tiêu này ❌');
+      return;
+    }
     setEditingExpense(expense);
     setFormData({
       amount: expense.amount.toString(),
@@ -86,14 +102,37 @@ const ExpenseManager: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa khoản chi này?')) {
-      try {
-        await sql`DELETE FROM expenses WHERE id = ${id}`;
-        fetchExpenses();
-      } catch (error) {
-        console.error('Error deleting expense:', error);
-      }
+    // Find the expense to check ownership
+    const expense = expenses.find(e => e.id === id);
+    if (!expense) return;
+
+    // Only allow deleting if user created this expense or is admin
+    if (expense.user_id !== user?.id && user?.role !== 'admin') {
+      toast.error('Bạn không có quyền xóa chi tiêu này ❌');
+      return;
     }
+
+    Swal.fire({
+      title: 'Xác nhận xóa',
+      text: "Bạn có chắc chắn muốn xóa chi tiêu này không?",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Xóa',
+      cancelButtonText: 'Hủy'
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          await sql`DELETE FROM expenses WHERE id = ${id}`;
+          fetchExpenses();
+          toast.success('Xóa chi tiêu thành công! 🗑️');
+        } catch (error) {
+          console.error('Error deleting expense:', error);
+          toast.error('Lỗi khi xóa chi tiêu. Vui lòng thử lại. ❌');
+        }
+      }
+    });
   };
 
   const resetForm = () => {
@@ -241,6 +280,9 @@ const ExpenseManager: React.FC = () => {
                   Số tiền
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Người tạo
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Thao tác
                 </th>
               </tr>
@@ -262,17 +304,22 @@ const ExpenseManager: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600">
                     {Number(expense.amount).toLocaleString('vi-VN')}₫
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {(expense as any).user_name || 'Unknown'}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleEdit(expense)}
                         className="text-blue-600 hover:text-blue-800"
+                        title="Sửa"
                       >
                         <FaEdit />
                       </button>
                       <button
                         onClick={() => handleDelete(expense.id)}
                         className="text-red-600 hover:text-red-800"
+                        title="Xóa"
                       >
                         <FaTrash />
                       </button>
@@ -284,6 +331,18 @@ const ExpenseManager: React.FC = () => {
           </table>
         </div>
       </div>
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+      />
     </div>
   );
 };
