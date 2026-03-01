@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaMoneyBillWave, FaChartLine, FaShoppingCart, FaPlus, FaSignOutAlt, FaUsers } from 'react-icons/fa';
+import { FaMoneyBillWave, FaChartLine, FaShoppingCart, FaSignOutAlt, FaUsers } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import { Expense, Revenue } from '../types';
 import { sql } from '../lib/database';
