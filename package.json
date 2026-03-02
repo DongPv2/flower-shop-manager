@@ -37,6 +37,9 @@
     ],
     "rules": {
       "@typescript-eslint/no-unused-vars": "warn"
+    },
+    "env": {
+      "CI": false
     }
   },
   "browserslist": {

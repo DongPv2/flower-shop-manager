@@ -1,46 +1,94 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaMoneyBillWave, FaChartLine, FaShoppingCart, FaSignOutAlt, FaUsers } from 'react-icons/fa';
+import { FaMoneyBillWave, FaChartLine, FaShoppingCart, FaSignOutAlt, FaClock, FaCheck } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
-import { Expense, Revenue } from '../types';
+import { Expense } from '../types';
+import { Order } from '../types';
 import { sql } from '../lib/database';
 import ExpenseManager from './ExpenseManager';
-import RevenueManager from './RevenueManager';
 import UserManager from './UserManager';
+import OrderManager from './OrderManager';
+import CustomerManager from './CustomerManager';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [revenues, setRevenues] = useState<Revenue[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'expenses' | 'revenues' | 'users'>('dashboard');
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'expenses' | 'users' | 'orders' | 'customers'>('dashboard');
   const [isLoading, setIsLoading] = useState(true);
+  const hasFetchedInitiallyRef = useRef(false);
+
+
+  const fetchExpenses = useCallback(async () => {
+    const expensesData = await sql`SELECT * FROM expenses ORDER BY date DESC`;
+    setExpenses(expensesData as Expense[]);
+  }, []);
+
+  const fetchOrders = useCallback(async () => {
+    const ordersData = await sql`SELECT * FROM orders ORDER BY created_at DESC`;
+    setOrders(ordersData as Order[]);
+  }, []);
+
+  const fetchAllData = useCallback(async () => {
+    try {
+      await Promise.all([fetchExpenses(), fetchOrders()]);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchExpenses, fetchOrders]);
 
   useEffect(() => {
     if (!user) {
       navigate('/');
       return;
     }
-    fetchData();
-  }, [user, navigate]);
-
-  const fetchData = async () => {
-    try {
-      const expensesData = await sql`SELECT * FROM expenses ORDER BY date DESC`;
-      const revenuesData = await sql`SELECT * FROM revenues ORDER BY date DESC`;
-
-      setExpenses(expensesData as Expense[]);
-      setRevenues(revenuesData as Revenue[]);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setIsLoading(false);
+    if (!hasFetchedInitiallyRef.current) {
+      hasFetchedInitiallyRef.current = true;
+      fetchAllData();
     }
-  };
+
+    // Listen for data refresh events
+    const handleDataRefresh = (event: Event) => {
+      const scope = (event as CustomEvent<{ scope?: 'all' | 'orders' | 'expenses' | 'customers' }>).detail?.scope;
+      if (!scope || scope === 'all') {
+        fetchAllData();
+        return;
+      }
+
+      if (scope === 'orders') {
+        fetchOrders();
+        return;
+      }
+
+      if (scope === 'expenses') {
+        fetchExpenses();
+        return;
+      }
+
+      if (scope === 'customers') {
+        // Customer tab fetches its own data; keep dashboard totals unchanged
+        return;
+      }
+    };
+
+    window.addEventListener('dataRefresh', handleDataRefresh);
+
+    return () => {
+      window.removeEventListener('dataRefresh', handleDataRefresh);
+    };
+  }, [user, navigate, fetchAllData, fetchOrders, fetchExpenses]);
 
   const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
-  const totalRevenues = revenues.reduce((sum, rev) => sum + Number(rev.amount), 0);
+  const totalRevenues = orders.filter(o => o.status === 'completed').reduce((sum, o) => sum + Number(o.total_amount), 0);
   const profit = totalRevenues - totalExpenses;
+  const pendingOrders = orders.filter(o => o.status === 'pending').length;
+  const inProgressOrders = orders.filter(o => o.status === 'in_progress').length;
+  const completedOrders = orders.filter(o => o.status === 'completed').length;
 
   const DashboardView = () => (
     <div className="space-y-6">
@@ -84,18 +132,56 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-yellow-600 text-sm font-medium">Đơn hàng chờ xử lý</p>
+              <p className="text-2xl font-bold text-yellow-700">
+                {pendingOrders}
+              </p>
+            </div>
+            <FaClock className="text-3xl text-yellow-500" />
+          </div>
+        </div>
+
+        <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-600 text-sm font-medium">Đơn hàng đang làm</p>
+              <p className="text-2xl font-bold text-blue-700">
+                {inProgressOrders}
+              </p>
+            </div>
+            <FaShoppingCart className="text-3xl text-blue-500" />
+          </div>
+        </div>
+
+        <div className="bg-green-50 p-6 rounded-lg border border-green-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-600 text-sm font-medium">Đơn hàng hoàn thành</p>
+              <p className="text-2xl font-bold text-green-700">
+                {completedOrders}
+              </p>
+            </div>
+            <FaCheck className="text-3xl text-green-500" />
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg border">
-          <h3 className="text-lg font-semibold mb-4">Giao dịch gần đây</h3>
+          <h3 className="text-lg font-semibold mb-4">Đơn hàng gần đây</h3>
           <div className="space-y-3">
-            {revenues.slice(0, 5).map((revenue) => (
-              <div key={revenue.id} className="flex justify-between items-center p-3 bg-green-50 rounded">
+            {orders.slice(0, 5).map((order) => (
+              <div key={order.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
                 <div>
-                  <p className="font-medium">{revenue.description}</p>
-                  <p className="text-sm text-gray-600">{new Date(revenue.date).toLocaleDateString('vi-VN')}</p>
+                  <p className="font-medium">{order.customer_name}</p>
+                  <p className="text-sm text-gray-600">{new Date(order.delivery_date).toLocaleDateString('vi-VN')}</p>
                 </div>
-                <p className="text-green-600 font-semibold">
-                  +{Number(revenue.amount).toLocaleString('vi-VN')}₫
+                <p className="text-gray-800 font-semibold">
+                  {Number(order.total_amount).toLocaleString('vi-VN')}₫
                 </p>
               </div>
             ))}
@@ -143,46 +229,56 @@ const Dashboard: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex space-x-1 mb-8 bg-white rounded-lg border p-1">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`flex-1 py-2 px-4 rounded-md transition ${activeTab === 'dashboard'
-              ? 'bg-pink-500 text-white'
-              : 'text-gray-600 hover:text-gray-900'
-              }`}
-          >
-            Tổng quan
-          </button>
-          <button
-            onClick={() => setActiveTab('expenses')}
-            className={`flex-1 py-2 px-4 rounded-md transition ${activeTab === 'expenses'
-              ? 'bg-pink-500 text-white'
-              : 'text-gray-600 hover:text-gray-900'
-              }`}
-          >
-            Chi tiêu
-          </button>
-          <button
-            onClick={() => setActiveTab('revenues')}
-            className={`flex-1 py-2 px-4 rounded-md transition ${activeTab === 'revenues'
-              ? 'bg-pink-500 text-white'
-              : 'text-gray-600 hover:text-gray-900'
-              }`}
-          >
-            Doanh thu
-          </button>
-          {user?.role === 'admin' && (
+        <div className="mb-8 bg-white rounded-lg border p-1 overflow-x-auto">
+          <div className="inline-flex gap-1 min-w-max whitespace-nowrap">
             <button
-              onClick={() => setActiveTab('users')}
-              className={`flex-1 py-2 px-4 rounded-md transition ${activeTab === 'users'
+              onClick={() => setActiveTab('dashboard')}
+              className={`shrink-0 py-2 px-4 rounded-md transition ${activeTab === 'dashboard'
                 ? 'bg-pink-500 text-white'
                 : 'text-gray-600 hover:text-gray-900'
                 }`}
             >
-              <FaUsers className="inline mr-2" />
-              Tài khoản
+              Tổng quan
             </button>
-          )}
+            <button
+              onClick={() => setActiveTab('orders')}
+              className={`shrink-0 py-2 px-4 rounded-md transition ${activeTab === 'orders'
+                ? 'bg-pink-500 text-white'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
+            >
+              Đơn hàng
+            </button>
+            <button
+              onClick={() => setActiveTab('expenses')}
+              className={`shrink-0 py-2 px-4 rounded-md transition ${activeTab === 'expenses'
+                ? 'bg-pink-500 text-white'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
+            >
+              Chi tiêu
+            </button>
+            <button
+              onClick={() => setActiveTab('customers')}
+              className={`shrink-0 py-2 px-4 rounded-md transition ${activeTab === 'customers'
+                ? 'bg-pink-500 text-white'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
+            >
+              Khách hàng
+            </button>
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`shrink-0 py-2 px-4 rounded-md transition ${activeTab === 'users'
+                  ? 'bg-pink-500 text-white'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                Tài khoản
+              </button>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
@@ -192,11 +288,25 @@ const Dashboard: React.FC = () => {
         ) : (
           <>
             {activeTab === 'dashboard' && <DashboardView />}
+            {activeTab === 'orders' && <OrderManager />}
+            {activeTab === 'customers' && <CustomerManager />}
             {activeTab === 'expenses' && <ExpenseManager />}
-            {activeTab === 'revenues' && <RevenueManager />}
             {activeTab === 'users' && <UserManager />}
           </>
         )}
+
+        <ToastContainer
+          position="top-right"
+          autoClose={3000}
+          hideProgressBar={false}
+          newestOnTop={false}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme="light"
+        />
       </div>
     </div>
   );

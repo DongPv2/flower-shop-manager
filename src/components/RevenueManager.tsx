@@ -3,7 +3,7 @@ import { FaPlus, FaTrash, FaEdit, FaChartLine } from 'react-icons/fa';
 import { Revenue } from '../types';
 import { sql } from '../lib/database';
 import { useAuth } from '../context/AuthContext';
-import { toast, ToastContainer } from 'react-toastify';
+import { toast } from 'react-toastify';
 import Swal from 'sweetalert2';
 import 'react-toastify/dist/ReactToastify.css';
 import 'sweetalert2/dist/sweetalert2.css';
@@ -20,6 +20,18 @@ const RevenueManager: React.FC = () => {
     description: '',
     date: new Date().toISOString().split('T')[0]
   });
+
+  // Format price input to Vietnamese format
+  const formatPriceInput = (value: string) => {
+    const cleanValue = value.replace(/\D/g, '');
+    if (cleanValue === '') return '';
+    return parseInt(cleanValue).toLocaleString('vi-VN');
+  };
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formattedValue = formatPriceInput(e.target.value);
+    setFormData({ ...formData, amount: formattedValue });
+  };
 
   useEffect(() => {
     fetchRevenues();
@@ -45,7 +57,16 @@ const RevenueManager: React.FC = () => {
     e.preventDefault();
 
     if (!user) {
-      alert('Bạn cần đăng nhập để thực hiện thao tác này');
+      toast.error('Bạn cần đăng nhập để thực hiện thao tác này ❌');
+      return;
+    }
+
+    // Parse formatted amount (remove dots and convert to number)
+    const cleanAmount = formData.amount.replace(/\D/g, '');
+    const amount = parseInt(cleanAmount);
+
+    if (!amount || amount <= 0) {
+      toast.error('Vui lòng nhập số tiền hợp lệ ❌');
       return;
     }
 
@@ -53,24 +74,29 @@ const RevenueManager: React.FC = () => {
       if (editingRevenue) {
         await sql`
           UPDATE revenues 
-          SET amount = ${Number(formData.amount)}, 
+          SET amount = ${amount}, 
               customer_name = ${formData.customer_name}, 
               description = ${formData.description}, 
               date = ${formData.date}
           WHERE id = ${editingRevenue.id}
         `;
+        toast.success('Cập nhật doanh thu thành công! ✏️');
       } else {
         await sql`
           INSERT INTO revenues (amount, customer_name, description, date, user_id)
-          VALUES (${Number(formData.amount)}, ${formData.customer_name}, ${formData.description}, ${formData.date}, ${user.id})
+          VALUES (${amount}, ${formData.customer_name}, ${formData.description}, ${formData.date}, ${user.id})
         `;
+        toast.success('Thêm doanh thu thành công! 💰');
       }
 
       fetchRevenues();
       resetForm();
+
+      // Trigger dashboard refresh
+      window.dispatchEvent(new CustomEvent('dataRefresh', { detail: { scope: 'revenues' } }));
     } catch (error) {
       console.error('Error saving revenue:', error);
-      alert('Lỗi khi lưu doanh thu. Vui lòng thử lại.');
+      toast.error('Lỗi khi lưu doanh thu. Vui lòng thử lại. ❌');
     }
   };
 
@@ -175,14 +201,14 @@ const RevenueManager: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Số tiền (₫)
+                  Số tiền
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  onChange={handleAmountChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="0"
+                  placeholder="1.000.000"
                   required
                 />
               </div>

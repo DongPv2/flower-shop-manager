@@ -26,6 +26,53 @@ export interface Revenue {
   created_at: string;
 }
 
+export interface Customer {
+  id: string;
+  phone: string;
+  name?: string;
+  address?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Order {
+  id: string;
+  user_id: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_address: string;
+  delivery_date: string;
+  delivery_time: string;
+  total_amount: number;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  items: OrderItem[];
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrderItem {
+  id: string;
+  order_id: string;
+  product_id?: string;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  stock_quantity: number;
+  description?: string;
+  image_url?: string;
+  created_at: string;
+}
+
 export interface AuthContextType {
   user: User | null;
   login: (username: string, password: string) => Promise<boolean>;
