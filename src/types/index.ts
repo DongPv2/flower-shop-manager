@@ -2,7 +2,7 @@ export interface User {
   id: string;
   username: string;
   name: string;
-  role: 'admin' | 'employee';
+  role: 'admin' | 'employee' | 'accountant';
   created_at: string;
 }
 
@@ -13,6 +13,7 @@ export interface Expense {
   category: string;
   description: string;
   date: string;
+  status: 'pending' | 'paid';
   created_at: string;
 }
 
@@ -48,6 +49,7 @@ export interface Order {
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   items: OrderItem[];
   notes?: string;
+  material_tags?: string;
   created_at: string;
   updated_at: string;
 }

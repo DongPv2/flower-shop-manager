@@ -6,6 +6,19 @@ const sql = neon(process.env.REACT_APP_NEON_DATABASE_URL || '', {
 
 export { sql };
 
+// Migration function for expenses status column
+export const migrateExpensesStatus = async () => {
+  try {
+    await sql`
+      ALTER TABLE expenses
+      ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'
+    `;
+    console.log('Expenses status column migration completed');
+  } catch (error) {
+    console.log('Expenses status column migration failed:', error);
+  }
+};
+
 // Database schema queries
 export const createTables = async () => {
   try {
@@ -16,7 +29,7 @@ export const createTables = async () => {
         username VARCHAR(50) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         name VARCHAR(100) NOT NULL,
-        role VARCHAR(20) DEFAULT 'employee',
+        role VARCHAR(20) DEFAULT 'employee' CHECK (role IN ('admin', 'employee', 'accountant')),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
@@ -30,6 +43,7 @@ export const createTables = async () => {
         category VARCHAR(50) NOT NULL,
         description TEXT,
         date DATE NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'paid')),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
@@ -87,6 +101,7 @@ export const createTables = async () => {
         total_amount DECIMAL(10,2) NOT NULL,
         status VARCHAR(20) DEFAULT 'pending',
         notes TEXT,
+        material_tags TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -111,24 +126,22 @@ export const createTables = async () => {
       ADD COLUMN IF NOT EXISTS product_id UUID
     `;
 
-    // Insert default admin user if not exists
+    // Migrate existing orders table to add material_tags column
     await sql`
-      INSERT INTO users (username, password_hash, name, role)
-      VALUES ('admin', 'admin123', 'Administrator', 'admin')
-      ON CONFLICT (username) DO NOTHING
+      ALTER TABLE orders
+      ADD COLUMN IF NOT EXISTS material_tags TEXT
     `;
 
-    // Insert sample products if not exists
-    await sql`
-      INSERT INTO products (name, category, price, stock_quantity, description) VALUES
-        ('Hoa hồng đỏ', 'Hoa tươi', 150000, 50, 'Bó hoa hồng đỏ tươi đẹp'),
-        ('Hoa tulip', 'Hoa tươi', 200000, 30, 'Hoa tulip Hà Lan'),
-        ('Bó hoa baby', 'Bó hoa', 120000, 40, 'Bó hoa baby trắng tinh khôi'),
-        ('Giỏ hoa mixed', 'Giỏ hoa', 350000, 15, 'Giỏ hoa các loại'),
-        ('Chậu sen đá', 'Chậu cây', 80000, 25, 'Chậu sen đá dễ chăm sóc')
-      ON CONFLICT DO NOTHING
-    `;
-
+    // Migrate existing expenses table to add status column (for databases created before this update)
+    try {
+      await sql`
+        ALTER TABLE expenses
+        ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'
+      `;
+      console.log('Expenses status column migration completed');
+    } catch (error) {
+      console.log('Expenses status column migration failed:', error);
+    }
     console.log('Database tables created successfully');
   } catch (error) {
     console.error('Error creating tables:', error);

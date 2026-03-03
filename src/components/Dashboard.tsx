@@ -4,7 +4,7 @@ import { FaMoneyBillWave, FaChartLine, FaShoppingCart, FaSignOutAlt, FaClock, Fa
 import { useAuth } from '../context/AuthContext';
 import { Expense } from '../types';
 import { Order } from '../types';
-import { sql } from '../lib/database';
+import { sql, createTables } from '../lib/database';
 import ExpenseManager from './ExpenseManager';
 import UserManager from './UserManager';
 import OrderManager from './OrderManager';
@@ -47,8 +47,20 @@ const Dashboard: React.FC = () => {
       navigate('/');
       return;
     }
+
+    // Initialize database tables and migrations
+    const initializeDatabase = async () => {
+      try {
+        await createTables();
+        console.log('Database initialized successfully');
+      } catch (error) {
+        console.error('Database initialization failed:', error);
+      }
+    };
+
     if (!hasFetchedInitiallyRef.current) {
       hasFetchedInitiallyRef.current = true;
+      initializeDatabase();
       fetchAllData();
     }
 

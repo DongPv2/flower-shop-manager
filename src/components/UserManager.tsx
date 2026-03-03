@@ -14,7 +14,7 @@ const UserManager: React.FC = () => {
     username: '',
     password: '',
     name: '',
-    role: 'employee' as 'admin' | 'employee'
+    role: 'employee' as 'admin' | 'employee' | 'accountant'
   });
 
   useEffect(() => {
@@ -37,12 +37,12 @@ const UserManager: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (currentUser?.role !== 'admin') {
       alert('Bạn không có quyền thực hiện thao tác này');
       return;
     }
-    
+
     try {
       if (editingUser) {
         await sql`
@@ -52,7 +52,7 @@ const UserManager: React.FC = () => {
               role = ${formData.role}
           WHERE id = ${editingUser.id}
         `;
-        
+
         if (formData.password) {
           await sql`
             UPDATE users 
@@ -66,7 +66,7 @@ const UserManager: React.FC = () => {
           VALUES (${formData.username}, ${formData.password}, ${formData.name}, ${formData.role})
         `;
       }
-      
+
       fetchUsers();
       resetForm();
     } catch (error) {
@@ -91,12 +91,12 @@ const UserManager: React.FC = () => {
       alert('Bạn không có quyền thực hiện thao tác này');
       return;
     }
-    
+
     if (id === currentUser?.id) {
       alert('Bạn không thể xóa tài khoản của chính mình');
       return;
     }
-    
+
     if (window.confirm('Bạn có chắc chắn muốn xóa tài khoản này?')) {
       try {
         await sql`DELETE FROM users WHERE id = ${id}`;
@@ -174,7 +174,7 @@ const UserManager: React.FC = () => {
                 <input
                   type="text"
                   value={formData.username}
-                  onChange={(e) => setFormData({...formData, username: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Tên đăng nhập"
                   required
@@ -188,7 +188,7 @@ const UserManager: React.FC = () => {
                 <input
                   type="password"
                   value={formData.password}
-                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Mật khẩu"
                   required={!editingUser}
@@ -202,7 +202,7 @@ const UserManager: React.FC = () => {
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Họ và tên nhân viên"
                   required
@@ -215,10 +215,11 @@ const UserManager: React.FC = () => {
                 </label>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData({...formData, role: e.target.value as 'admin' | 'employee'})}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'employee' | 'accountant' })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="employee">Nhân viên</option>
+                  <option value="accountant">Kế toán</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
@@ -275,12 +276,13 @@ const UserManager: React.FC = () => {
                     {user.name}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      user.role === 'admin' 
-                        ? 'bg-purple-100 text-purple-800' 
+                    <span className={`px-2 py-1 text-xs rounded-full ${user.role === 'admin'
+                      ? 'bg-purple-100 text-purple-800'
+                      : user.role === 'accountant'
+                        ? 'bg-orange-100 text-orange-800'
                         : 'bg-green-100 text-green-800'
-                    }`}>
-                      {user.role === 'admin' ? 'Admin' : 'Nhân viên'}
+                      }`}>
+                      {user.role === 'admin' ? 'Admin' : user.role === 'accountant' ? 'Kế toán' : 'Nhân viên'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

@@ -63,6 +63,27 @@ const ExpenseManager: React.FC = () => {
     }
   };
 
+  const handlePayment = async (expenseId: string) => {
+    if (user?.role !== 'accountant' && user?.role !== 'admin') {
+      toast.error('Bạn không có quyền thanh toán chi tiêu này ❌');
+      return;
+    }
+
+    try {
+      await sql`
+        UPDATE expenses 
+        SET status = 'paid'
+        WHERE id = ${expenseId}
+      `;
+
+      fetchExpenses();
+      toast.success('Đã thanh toán chi tiêu! 💰');
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      toast.error('Lỗi khi thanh toán. Vui lòng thử lại. ❌');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -292,12 +313,15 @@ const ExpenseManager: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Trạng thái
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Ngày
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Danh mục
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
                   Mô tả
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -314,23 +338,52 @@ const ExpenseManager: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {expenses.map((expense) => (
                 <tr key={expense.id} className="hover:bg-gray-50">
+
+                  {/* TRẠNG THÁI (đưa lên đầu) */}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {(expense as any).status === 'paid' ? (
+                      <span className="px-3 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                        Đã thanh toán
+                      </span>
+                    ) : (
+                      (user?.role === 'accountant' || user?.role === 'admin') ? (
+                        <button
+                          onClick={() => handlePayment(expense.id)}
+                          className="inline-flex items-center gap-1 bg-green-500 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-green-600 transition"
+                        >
+                          Thanh toán
+                        </button>
+                      ) : (
+                        <span className="px-3 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                          Chờ thanh toán
+                        </span>
+                      )
+                    )}
+                  </td>
+
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {new Date(expense.date).toLocaleDateString('vi-VN')}
                   </td>
+
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
                       {expense.category}
                     </span>
                   </td>
+
                   <td className="px-6 py-4 text-sm text-gray-900">
                     {expense.description}
                   </td>
+
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600">
                     {Number(expense.amount).toLocaleString('vi-VN')}₫
                   </td>
+
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {(expense as any).user_name || 'Unknown'}
                   </td>
+
+                  {/* THAO TÁC (đã bỏ nút thanh toán) */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div className="flex gap-2">
                       <button
@@ -349,6 +402,7 @@ const ExpenseManager: React.FC = () => {
                       </button>
                     </div>
                   </td>
+
                 </tr>
               ))}
             </tbody>
