@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaPlus, FaTrash, FaEdit, FaMoneyBillWave } from 'react-icons/fa';
+import { FaPlus, FaTrash, FaEdit, FaMoneyBillWave, FaCheck, FaClock, FaUndo } from 'react-icons/fa';
 import { Expense } from '../types';
 import { sql } from '../lib/database';
 import { useAuth } from '../context/AuthContext';
@@ -81,6 +81,40 @@ const ExpenseManager: React.FC = () => {
     } catch (error) {
       console.error('Error processing payment:', error);
       toast.error('Lỗi khi thanh toán. Vui lòng thử lại. ❌');
+    }
+  };
+
+  const handleUnpay = async (expenseId: string) => {
+    if (user?.role !== 'accountant' && user?.role !== 'admin') {
+      toast.error('Bạn không có quyền hủy thanh toán chi tiêu này ❌');
+      return;
+    }
+
+    const result = await Swal.fire({
+      title: 'Xác nhận hủy thanh toán?',
+      text: 'Bạn có chắc chắn muốn hủy thanh toán khoản chi tiêu này không?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#f97316',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Hủy thanh toán',
+      cancelButtonText: 'Không'
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await sql`
+          UPDATE expenses 
+          SET status = 'pending'
+          WHERE id = ${expenseId}
+        `;
+
+        fetchExpenses();
+        toast.success('Đã hủy thanh toán chi tiêu!');
+      } catch (error) {
+        console.error('Error unpaying expense:', error);
+        toast.error('Lỗi khi hủy thanh toán. Vui lòng thử lại. ❌');
+      }
     }
   };
 
@@ -307,80 +341,107 @@ const ExpenseManager: React.FC = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-lg border overflow-hidden">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+        <div className="bg-gradient-to-r from-red-50 to-orange-50 px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-800">Quản lý Chi tiêu</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            Hiển thị {expenses.length} khoản chi tiêu
+          </p>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Trạng thái
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Ngày
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Danh mục
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[200px]">
                   Mô tả
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Số tiền
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Người tạo
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Thao tác
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {expenses.map((expense) => (
-                <tr key={expense.id} className="hover:bg-gray-50">
+                <tr key={expense.id} className="hover:bg-gray-50 transition-all duration-200 hover:shadow-sm">
 
                   {/* TRẠNG THÁI (đưa lên đầu) */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     {(expense as any).status === 'paid' ? (
-                      <span className="px-3 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                        Đã thanh toán
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-full bg-green-100 text-green-800 border border-green-200">
+                          <FaCheck className="mr-1" /> Đã thanh toán
+                        </span>
+                        {(user?.role === 'accountant' || user?.role === 'admin') && (
+                          <button
+                            onClick={() => handleUnpay(expense.id)}
+                            className="inline-flex items-center gap-1 bg-orange-500 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-orange-600 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                            title="Hủy thanh toán"
+                          >
+                            <FaUndo title="Hủy thanh toán" />
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       (user?.role === 'accountant' || user?.role === 'admin') ? (
                         <button
                           onClick={() => handlePayment(expense.id)}
-                          className="inline-flex items-center gap-1 bg-green-500 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-green-600 transition"
+                          className="inline-flex items-center gap-1 bg-green-500 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-green-600 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
                         >
                           Thanh toán
                         </button>
                       ) : (
-                        <span className="px-3 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
-                          Chờ thanh toán
+                        <span className="inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
+                          <FaClock className="mr-1" /> Chờ thanh toán
                         </span>
                       )
                     )}
                   </td>
 
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {new Date(expense.date).toLocaleDateString('vi-VN')}
+                    <div className="font-semibold text-gray-900">
+                      {new Date(expense.date).toLocaleDateString('vi-VN')}
+                    </div>
                   </td>
 
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+                    <span className="inline-flex items-center px-2.5 py-1 bg-gradient-to-r from-red-50 to-orange-50 text-red-700 rounded-full text-xs font-medium border border-red-200">
                       {expense.category}
                     </span>
                   </td>
 
                   <td className="px-6 py-4 text-sm text-gray-900">
-                    {expense.description}
+                    <div className="truncate max-w-xs" title={expense.description}>
+                      {expense.description}
+                    </div>
                   </td>
 
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600">
-                    {Number(expense.amount).toLocaleString('vi-VN')}₫
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <div className="flex items-center">
+                      <span className="text-lg font-bold text-red-600">
+                        {Number(expense.amount).toLocaleString('vi-VN')}₫
+                      </span>
+                    </div>
                   </td>
 
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {(expense as any).user_name || 'Unknown'}
+                    <span className="font-medium text-gray-900">
+                      {(expense as any).user_name || 'Unknown'}
+                    </span>
                   </td>
 
                   {/* THAO TÁC (đã bỏ nút thanh toán) */}
@@ -388,14 +449,14 @@ const ExpenseManager: React.FC = () => {
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleEdit(expense)}
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
                         title="Sửa"
                       >
                         <FaEdit />
                       </button>
                       <button
                         onClick={() => handleDelete(expense.id)}
-                        className="text-red-600 hover:text-red-800"
+                        className="text-red-600 hover:text-red-800 hover:bg-red-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
                         title="Xóa"
                       >
                         <FaTrash />

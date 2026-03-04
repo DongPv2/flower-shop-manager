@@ -38,6 +38,7 @@ const OrderManager: React.FC = () => {
   const itemsPerPage = 20;
   const [materialTags, setMaterialTags] = useState<string[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'cancelled'>('all');
 
   // Format price input to Vietnamese format
   const formatPriceInput = (value: string) => {
@@ -137,14 +138,51 @@ const OrderManager: React.FC = () => {
     return [...sortedOverdue, ...sortedToday, ...sortedOthers];
   }, [sortConfig]);
 
+  // Filter orders by status
+  const filteredOrders = React.useMemo(() => {
+    if (selectedStatus === 'all') {
+      return orders;
+    }
+    return orders.filter(order => order.status === selectedStatus);
+  }, [orders, selectedStatus]);
+
+  // Get paginated orders for current page
+  const paginatedOrders = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredOrders.slice(startIndex, endIndex);
+  }, [filteredOrders, currentPage]);
+
+  // Calculate statistics for each status
+  const statusStats = React.useMemo(() => {
+    const pendingOrders = orders.filter(o => o.status === 'pending');
+    const inProgressOrders = orders.filter(o => o.status === 'in_progress');
+    const completedOrders = orders.filter(o => o.status === 'completed');
+    const cancelledOrders = orders.filter(o => o.status === 'cancelled');
+
+    return {
+      pending: {
+        count: pendingOrders.length,
+        total: pendingOrders.reduce((sum, o) => sum + Number(o.total_amount), 0)
+      },
+      in_progress: {
+        count: inProgressOrders.length,
+        total: inProgressOrders.reduce((sum, o) => sum + Number(o.total_amount), 0)
+      },
+      completed: {
+        count: completedOrders.length,
+        total: completedOrders.reduce((sum, o) => sum + Number(o.total_amount), 0)
+      },
+      cancelled: {
+        count: cancelledOrders.length,
+        total: cancelledOrders.reduce((sum, o) => sum + Number(o.total_amount), 0)
+      }
+    };
+  }, [orders]);
+
   const fetchOrders = useCallback(async () => {
     try {
-      // Fetch total count
-      const countResult = await sql`SELECT COUNT(*)::int as total FROM orders`;
-      setTotalOrders((countResult as any[])[0]?.total || 0);
-
-      // Fetch paginated orders
-      const offset = (currentPage - 1) * itemsPerPage;
+      // Fetch all orders for filtering (not paginated)
       const result = await sql`
         SELECT o.*, u.name as user_name
         FROM orders o
@@ -158,27 +196,48 @@ const OrderManager: React.FC = () => {
             WHEN o.delivery_time IS NOT NULL THEN o.delivery_time 
             ELSE '23:59:59' 
           END ASC,
-          o.created_at DESC
-        LIMIT ${itemsPerPage} OFFSET ${offset}
+          o.created_at DESC,
+          o.id ASC
       `;
 
       const processedOrders = processOrders(result as Order[]);
       setOrders(processedOrders);
+
+      // Set total count for pagination
+      setTotalOrders((result as Order[]).length);
     } catch (error) {
       console.error('Error fetching orders:', error);
       setOrders([]);
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, processOrders]);
+  }, [processOrders]);
 
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
 
+  // Reset to first page when status filter changes
   useEffect(() => {
-    fetchOrders();
-  }, [currentPage, fetchOrders]);
+    setCurrentPage(1);
+  }, [selectedStatus]);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (selectedOrder) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.paddingRight = '0px'; // Prevent layout shift
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    }
+
+    // Cleanup on unmount
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    };
+  }, [selectedOrder]);
 
   useEffect(() => {
     const phone = (formData.customer_phone || '').trim();
@@ -270,7 +329,12 @@ const OrderManager: React.FC = () => {
   const fetchOrderItems = async (orderId: string) => {
     try {
       const result = await sql`SELECT * FROM order_items WHERE order_id = ${orderId}`;
-      return result as OrderItem[];
+      return (result as any[]).map(item => ({
+        ...item,
+        quantity: Number(item.quantity),
+        unit_price: Number(item.unit_price),
+        total_price: Number(item.total_price)
+      })) as OrderItem[];
     } catch (error) {
       console.error('Error fetching order items:', error);
       return [];
@@ -351,7 +415,7 @@ const OrderManager: React.FC = () => {
         for (const item of orderItems) {
           await sql`
             INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, total_price)
-            VALUES (${editingOrder.id}, ${null}, ${item.product_name}, ${item.quantity}, ${item.unit_price}, ${item.total_price})
+            VALUES (${editingOrder.id}, ${null}, ${item.product_name}, ${Number(item.quantity)}, ${Number(item.unit_price)}, ${Number(item.total_price)})
           `;
         }
 
@@ -371,7 +435,7 @@ const OrderManager: React.FC = () => {
         for (const item of orderItems) {
           await sql`
             INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, total_price)
-            VALUES (${orderId}, ${null}, ${item.product_name}, ${item.quantity}, ${item.unit_price}, ${item.total_price})
+            VALUES (${orderId}, ${null}, ${item.product_name}, ${Number(item.quantity)}, ${Number(item.unit_price)}, ${Number(item.total_price)})
           `;
         }
 
@@ -455,7 +519,7 @@ const OrderManager: React.FC = () => {
       customer_name: order.customer_name,
       customer_phone: order.customer_phone,
       customer_address: order.customer_address,
-      delivery_date: new Date(order.delivery_date).toISOString().split('T')[0],
+      delivery_date: new Date(order.delivery_date).toLocaleDateString('en-CA'),
       delivery_time: order.delivery_time,
       notes: order.notes || ''
     });
@@ -692,56 +756,107 @@ const OrderManager: React.FC = () => {
 
       {/* Hide overview when form is shown */}
       {!showForm && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-yellow-600 text-sm font-medium">Chờ xử lý</p>
-                <p className="text-2xl font-bold text-yellow-700">
-                  {orders?.filter(o => o.status === 'pending').length || 0}
-                </p>
+        <div className="space-y-4">
+          {/* Status Filter Boxes */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            {/* All Orders */}
+            <div
+              onClick={() => setSelectedStatus('all')}
+              className={`p-6 rounded-lg border cursor-pointer transition-all ${selectedStatus === 'all'
+                ? 'bg-indigo-50 border-indigo-300 shadow-md'
+                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-600 text-sm font-medium">Tất cả</p>
+                  <p className="text-2xl font-bold text-gray-700">{orders.length}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {Math.round(orders.reduce((sum, o) => sum + Number(o.total_amount), 0)).toLocaleString('vi-VN')}₫
+                  </p>
+                </div>
+                <FaShoppingCart className={`text-3xl ${selectedStatus === 'all' ? 'text-indigo-500' : 'text-gray-400'}`} />
               </div>
-              <FaClock className="text-3xl text-yellow-500" />
             </div>
-          </div>
 
-          <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-600 text-sm font-medium">Đang làm</p>
-                <p className="text-2xl font-bold text-blue-700">
-                  {orders?.filter(o => o.status === 'in_progress').length || 0}
-                </p>
+            {/* Pending */}
+            <div
+              onClick={() => setSelectedStatus('pending')}
+              className={`p-6 rounded-lg border cursor-pointer transition-all ${selectedStatus === 'pending'
+                ? 'bg-yellow-50 border-yellow-300 shadow-md'
+                : 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100'
+                }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-yellow-600 text-sm font-medium">Chờ xử lý</p>
+                  <p className="text-2xl font-bold text-yellow-700">{statusStats.pending.count}</p>
+                  <p className="text-xs text-yellow-600 mt-1">
+                    {Math.round(statusStats.pending.total).toLocaleString('vi-VN')}₫
+                  </p>
+                </div>
+                <FaClock className={`text-3xl ${selectedStatus === 'pending' ? 'text-yellow-600' : 'text-yellow-500'}`} />
               </div>
-              <FaShoppingCart className="text-3xl text-blue-500" />
             </div>
-          </div>
 
-          <div className="bg-green-50 p-6 rounded-lg border border-green-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-600 text-sm font-medium">Hoàn thành</p>
-                <p className="text-2xl font-bold text-green-700">
-                  {orders?.filter(o => o.status === 'completed').length || 0}
-                </p>
+            {/* In Progress */}
+            <div
+              onClick={() => setSelectedStatus('in_progress')}
+              className={`p-6 rounded-lg border cursor-pointer transition-all ${selectedStatus === 'in_progress'
+                ? 'bg-blue-50 border-blue-300 shadow-md'
+                : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-blue-600 text-sm font-medium">Đang làm</p>
+                  <p className="text-2xl font-bold text-blue-700">{statusStats.in_progress.count}</p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    {Math.round(statusStats.in_progress.total).toLocaleString('vi-VN')}₫
+                  </p>
+                </div>
+                <FaShoppingCart className={`text-3xl ${selectedStatus === 'in_progress' ? 'text-blue-600' : 'text-blue-500'}`} />
               </div>
-              <FaCheck className="text-3xl text-green-500" />
             </div>
-          </div>
 
-          <div className="bg-purple-50 p-6 rounded-lg border border-purple-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-600 text-sm font-medium">Tổng doanh thu</p>
-                <p className="text-2xl font-bold text-purple-700">
-                  {Math.round(
-                    (orders || [])
-                      .filter(o => o.status === 'completed')
-                      .reduce((sum, o) => sum + Number(o.total_amount), 0)
-                  ).toLocaleString('vi-VN')}₫
-                </p>
+            {/* Completed */}
+            <div
+              onClick={() => setSelectedStatus('completed')}
+              className={`p-6 rounded-lg border cursor-pointer transition-all ${selectedStatus === 'completed'
+                ? 'bg-green-50 border-green-300 shadow-md'
+                : 'bg-green-50 border-green-200 hover:bg-green-100'
+                }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-green-600 text-sm font-medium">Hoàn thành</p>
+                  <p className="text-2xl font-bold text-green-700">{statusStats.completed.count}</p>
+                  <p className="text-xs text-green-600 mt-1">
+                    {Math.round(statusStats.completed.total).toLocaleString('vi-VN')}₫
+                  </p>
+                </div>
+                <FaCheck className={`text-3xl ${selectedStatus === 'completed' ? 'text-green-600' : 'text-green-500'}`} />
               </div>
-              <FaMoneyBillWave className="text-3xl text-purple-500" />
+            </div>
+
+            {/* Cancelled */}
+            <div
+              onClick={() => setSelectedStatus('cancelled')}
+              className={`p-6 rounded-lg border cursor-pointer transition-all ${selectedStatus === 'cancelled'
+                ? 'bg-red-50 border-red-300 shadow-md'
+                : 'bg-red-50 border-red-200 hover:bg-red-100'
+                }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-red-600 text-sm font-medium">Đã hủy</p>
+                  <p className="text-2xl font-bold text-red-700">{statusStats.cancelled.count}</p>
+                  <p className="text-xs text-red-600 mt-1">
+                    {Math.round(statusStats.cancelled.total).toLocaleString('vi-VN')}₫
+                  </p>
+                </div>
+                <FaTimes className={`text-3xl ${selectedStatus === 'cancelled' ? 'text-red-600' : 'text-red-500'}`} />
+              </div>
             </div>
           </div>
         </div>
@@ -981,48 +1096,76 @@ const OrderManager: React.FC = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-lg border overflow-hidden">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-800">
+            {selectedStatus === 'all' && 'Tất cả đơn hàng'}
+            {selectedStatus === 'pending' && 'Đơn hàng chờ xử lý'}
+            {selectedStatus === 'in_progress' && 'Đơn hàng đang thực hiện'}
+            {selectedStatus === 'completed' && 'Đơn hàng hoàn thành'}
+            {selectedStatus === 'cancelled' && 'Đơn hàng đã hủy'}
+          </h3>
+          <p className="text-sm text-gray-600 mt-1">
+            Hiển thị {paginatedOrders.length} / {filteredOrders.length} đơn hàng
+          </p>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Thao tác
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Khách hàng
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Nguyên vật liệu
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleSort('status')}>
-                  Trạng thái
-                  {sortConfig?.key === 'status' && (
-                    <span className="ml-1">
-                      {sortConfig.direction === 'asc' ? '↑' : '↓'}
-                    </span>
-                  )}
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors rounded" onClick={() => handleSort('status')}>
+                  <div className="flex items-center gap-2">
+                    Trạng thái
+                    {sortConfig?.key === 'status' && (
+                      <span className="text-blue-600">
+                        {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ngày giao
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors rounded" onClick={() => handleSort('delivery_date')}>
+                  <div className="flex items-center gap-2">
+                    Ngày giao
+                    {sortConfig?.key === 'delivery_date' && (
+                      <span className="text-blue-600">
+                        {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Tổng tiền
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[200px]">
+                  Ghi chú
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Người tạo
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors rounded" onClick={() => handleSort('total_amount')}>
+                  <div className="flex items-center gap-2">
+                    Tổng tiền
+                    {sortConfig?.key === 'total_amount' && (
+                      <span className="text-blue-600">
+                        {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
+                  </div>
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {orders.map((order) => (
+              {paginatedOrders.map((order) => (
                 <tr
                   key={order.id}
-                  className={`hover:bg-gray-50 ${isOverdue(order)
-                    ? 'bg-red-50 border-l-4 border-red-500'
+                  className={`hover:bg-gray-50 transition-all duration-200 ${isOverdue(order)
+                    ? 'bg-red-50 border-l-4 border-red-500 shadow-sm'
                     : isToday(order)
-                      ? 'bg-blue-50'
-                      : ''
+                      ? 'bg-blue-50 border-l-4 border-blue-300'
+                      : 'hover:shadow-sm'
                     }`}
                 >
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1030,7 +1173,7 @@ const OrderManager: React.FC = () => {
                       {/* View button - always visible */}
                       <button
                         onClick={() => handleViewOrder(order)}
-                        className="text-purple-600 hover:text-purple-800 p-2 flex items-center justify-center"
+                        className="text-purple-600 hover:text-purple-800 hover:bg-purple-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
                         title="Xem chi tiết"
                       >
                         <FaEye className="inline" />
@@ -1040,7 +1183,7 @@ const OrderManager: React.FC = () => {
                       {order.status === 'in_progress' && (
                         <button
                           onClick={() => updateOrderStatus(order.id, 'completed')}
-                          className="text-green-600 hover:text-green-800 p-2 flex items-center justify-center"
+                          className="text-green-600 hover:text-green-800 hover:bg-green-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
                           title="Hoàn thành"
                         >
                           <FaCheck className="inline" />
@@ -1050,7 +1193,7 @@ const OrderManager: React.FC = () => {
                       {/* Edit button */}
                       <button
                         onClick={() => handleEdit(order)}
-                        className="text-blue-600 hover:text-blue-800 p-2 flex items-center justify-center"
+                        className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
                         title="Sửa"
                       >
                         <FaEdit />
@@ -1059,7 +1202,7 @@ const OrderManager: React.FC = () => {
                       {/* Delete button */}
                       <button
                         onClick={() => handleDelete(order.id)}
-                        className="text-red-600 hover:text-red-800 p-2 flex items-center justify-center"
+                        className="text-red-600 hover:text-red-800 hover:bg-red-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
                         title="Xóa"
                       >
                         <FaTrash />
@@ -1067,24 +1210,29 @@ const OrderManager: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <div className="font-medium">{order.customer_name}</div>
-                        <div className="text-xs text-gray-500">{order.customer_phone || 'Không có SĐT'}</div>
-                        <div className="text-xs text-gray-500">{order.customer_address}</div>
+                    <div className="max-w-[150px]">
+                      <div className="font-semibold text-gray-900 truncate" title={order.customer_name}>
+                        {order.customer_name}
+                      </div>
+                      <div className="text-xs text-gray-500 truncate" title={order.customer_phone || ''}>
+                        {order.customer_phone || 'Không có SĐT'}
+                      </div>
+                      <div className="text-xs text-gray-500 truncate" title={order.customer_address || ''}>
+                        {order.customer_address}
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {order.material_tags ? (
-                      <div className="flex flex-wrap gap-1 max-w-xs">
+                      <div className="flex flex-wrap gap-1 max-w-[150px]">
                         {(() => {
                           try {
                             const tags = JSON.parse(order.material_tags);
                             return Array.isArray(tags) ? tags.slice(0, 2).map((tag, index) => (
                               <span
                                 key={index}
-                                className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs"
+                                className="inline-flex items-center px-2.5 py-1 bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 rounded-full text-xs font-medium border border-green-200 truncate"
+                                title={tag}
                               >
                                 {tag}
                               </span>
@@ -1097,7 +1245,12 @@ const OrderManager: React.FC = () => {
                           try {
                             const tags = JSON.parse(order.material_tags);
                             return Array.isArray(tags) && tags.length > 2 ? (
-                              <span className="text-xs text-gray-500">+{tags.length - 2}</span>
+                              <span
+                                className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium cursor-help hover:bg-gray-200 transition-colors"
+                                title={tags.slice(2).join(', ')}
+                              >
+                                +{tags.length - 2}
+                              </span>
                             ) : null;
                           } catch (error) {
                             return null;
@@ -1105,26 +1258,47 @@ const OrderManager: React.FC = () => {
                         })()}
                       </div>
                     ) : (
-                      <span className="text-xs text-gray-400">Không có</span>
+                      <span className="inline-flex items-center px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-xs font-medium">
+                        Không có
+                      </span>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <span className={`px-2 py-1 text-xs rounded-full flex items-center gap-1 ${getStatusColor(order.status)}`}>
+                    <span className={`inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-full transition-all duration-200 ${getStatusColor(order.status)}`}>
                       {getStatusIcon(order.status)}
-                      {getStatusText(order.status)}
+                      <span className="ml-1.5">{getStatusText(order.status)}</span>
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <div>
-                      <div>{new Date(order.delivery_date).toLocaleDateString('vi-VN')}</div>
-                      <div className="text-xs text-gray-500">{order.delivery_time}</div>
+                    <div className="flex flex-col">
+                      <div className="font-semibold text-gray-900">
+                        {new Date(order.delivery_date).toLocaleDateString('vi-VN')}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {order.delivery_time}
+                      </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
-                    {Math.round(order.total_amount).toLocaleString('vi-VN')}₫
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    <div className="max-w-[150px]" title={order.notes || ''}>
+                      <div style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        lineHeight: '1.5'
+                      }}>
+                        {order.notes || <span className="text-gray-400 italic">Không có ghi chú</span>}
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {(order as any).user_name || 'Unknown'}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <div className="flex items-center">
+                      <span className="text-lg font-bold text-green-600">
+                        {Math.round(order.total_amount).toLocaleString('vi-VN')}₫
+                      </span>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1134,24 +1308,32 @@ const OrderManager: React.FC = () => {
       </div>
 
       {/* Pagination */}
-      {totalOrders > itemsPerPage && (
-        <div className="bg-white rounded-lg border p-4">
+      {filteredOrders.length > itemsPerPage && (
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 mt-6">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-700">
-              Hiển thị {((currentPage - 1) * itemsPerPage) + 1} đến {Math.min(currentPage * itemsPerPage, totalOrders)} của {totalOrders} đơn hàng
+              <span className="font-medium">Hiển thị</span>
+              <span className="mx-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-semibold">
+                {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredOrders.length)}
+              </span>
+              <span className="font-medium">của</span>
+              <span className="ml-2 px-3 py-1 bg-gray-100 text-gray-700 rounded-full font-semibold">
+                {filteredOrders.length}
+              </span>
+              <span className="font-medium">đơn hàng</span>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-1 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
               >
-                Trước
+                ← Trước
               </button>
 
               {/* Page numbers */}
-              {Array.from({ length: Math.ceil(totalOrders / itemsPerPage) }, (_, i) => i + 1).map(page => {
-                const totalPages = Math.ceil(totalOrders / itemsPerPage);
+              {Array.from({ length: Math.ceil(filteredOrders.length / itemsPerPage) }, (_, i) => i + 1).map(page => {
+                const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
                 let showPage = false;
 
                 // Show first page, last page, current page, and pages around current
@@ -1171,14 +1353,14 @@ const OrderManager: React.FC = () => {
                   (page === currentPage + 2 && page < totalPages - 1);
 
                 return isEllipsis ? (
-                  <span key={page} className="px-3 py-1 text-sm text-gray-500">...</span>
+                  <span key={page} className="px-3 py-2 text-sm text-gray-500">...</span>
                 ) : (
                   <button
                     key={page}
                     onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-1 text-sm border rounded-lg ${currentPage === page
-                      ? 'bg-blue-500 text-white border-blue-500'
-                      : 'hover:bg-gray-50'
+                    className={`px-4 py-2 text-sm font-medium border rounded-lg transition-all duration-200 ${currentPage === page
+                      ? 'bg-blue-500 text-white border-blue-500 shadow-md transform scale-105'
+                      : 'border-gray-300 hover:bg-gray-50 hover:shadow-sm'
                       }`}
                   >
                     {page}
@@ -1187,11 +1369,11 @@ const OrderManager: React.FC = () => {
               })}
 
               <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(totalOrders / itemsPerPage)))}
-                disabled={currentPage === Math.ceil(totalOrders / itemsPerPage)}
-                className="px-3 py-1 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredOrders.length / itemsPerPage)))}
+                disabled={currentPage === Math.ceil(filteredOrders.length / itemsPerPage)}
+                className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
               >
-                Sau
+                Sau →
               </button>
             </div>
           </div>
@@ -1200,8 +1382,8 @@ const OrderManager: React.FC = () => {
 
       {/* Order Detail Modal */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden">
+          <div className="bg-white rounded-lg w-full max-h-[90vh] overflow-hidden">
             <div className="p-6">
               <div className="flex justify-between items-start mb-4">
                 <h3 className="text-xl font-bold text-gray-900">Chi tiết đơn hàng</h3>
@@ -1213,130 +1395,141 @@ const OrderManager: React.FC = () => {
                 </button>
               </div>
 
-              {/* Notes Section - Prominently displayed */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                <h4 className="font-semibold text-yellow-800 mb-2">📝 Ghi chú</h4>
-                <p className="text-gray-700">
-                  {selectedOrder.notes || 'Không có ghi chú'}
-                </p>
-              </div>
-
-              {/* Material Tags Section */}
-              {selectedOrder.material_tags && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-                  <h4 className="font-semibold text-green-800 mb-2">🛍️ Nguyên vật liệu cần mua</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {(() => {
-                      try {
-                        const tags = JSON.parse(selectedOrder.material_tags);
-                        return Array.isArray(tags) ? tags.map((tag, index) => (
-                          <span
-                            key={index}
-                            className="inline-flex items-center px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium"
-                          >
-                            {tag}
-                          </span>
-                        )) : null;
-                      } catch (error) {
-                        return (
-                          <span className="text-gray-600 text-sm">
-                            {selectedOrder.material_tags}
-                          </span>
-                        );
-                      }
-                    })()}
-                  </div>
-                </div>
-              )}
-
-              {/* Customer Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div>
-                  <h4 className="font-semibold text-gray-700 mb-2">Thông tin khách hàng</h4>
-                  <div className="space-y-1 text-sm">
-                    <p><span className="font-medium">Tên:</span> {selectedOrder.customer_name}</p>
-                    <p><span className="font-medium">SĐT:</span> {selectedOrder.customer_phone}</p>
-                    <p><span className="font-medium">Địa chỉ:</span> {selectedOrder.customer_address || 'Không có'}</p>
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-700 mb-2">Thời gian giao hàng</h4>
-                  <div className="space-y-1 text-sm">
-                    <p><span className="font-medium">Ngày:</span> {new Date(selectedOrder.delivery_date).toLocaleDateString('vi-VN')}</p>
-                    <p><span className="font-medium">Giờ:</span> {selectedOrder.delivery_time}</p>
-                    <p><span className="font-medium">Trạng thái:</span>
-                      <span className={`ml-2 px-2 py-1 text-xs rounded-full ${getStatusColor(selectedOrder.status)}`}>
-                        {getStatusText(selectedOrder.status)}
-                      </span>
+              <div className="overflow-y-auto max-h-[calc(90vh-8rem)]">
+                {/* Notes Section - Prominently displayed */}
+                {selectedOrder.notes && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                    <h5 className="font-semibold text-yellow-800 mb-2">Ghi chú</h5>
+                    <p className="text-gray-700 break-words text-left">
+                      {selectedOrder.notes}
                     </p>
                   </div>
-                </div>
-              </div>
-
-              {/* Order Items */}
-              <div className="mb-6">
-                <h4 className="font-semibold text-gray-700 mb-2">Sản phẩm</h4>
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Sản phẩm</th>
-                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">SL</th>
-                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Đơn giá</th>
-                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Thành tiền</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {selectedOrderItems.map((item, index) => (
-                        <tr key={index}>
-                          <td className="px-4 py-2 text-sm">{item.product_name}</td>
-                          <td className="px-4 py-2 text-sm text-right">{item.quantity}</td>
-                          <td className="px-4 py-2 text-sm text-right">{Math.round(item.unit_price).toLocaleString('vi-VN')}₫</td>
-                          <td className="px-4 py-2 text-sm font-medium text-right">{Math.round(item.total_price).toLocaleString('vi-VN')}₫</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-gray-50">
-                      <tr>
-                        <td colSpan={3} className="px-4 py-2 text-sm font-medium text-right">Tổng cộng:</td>
-                        <td className="px-4 py-2 text-sm font-bold text-right">{Math.round(selectedOrder.total_amount).toLocaleString('vi-VN')}₫</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 justify-end">
-                {(selectedOrder.status === 'pending' || selectedOrder.status === 'in_progress') && (
-                  <>
-                    {selectedOrder.status === 'pending' && (
-                      <button
-                        onClick={() => {
-                          updateOrderStatus(selectedOrder.id, 'in_progress');
-                          handleCloseOrderDetail();
-                        }}
-                        className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition flex items-center"
-                      >
-                        <FaShoppingCart className="mr-2" />
-                        Bắt đầu
-                      </button>
-                    )}
-                    <button
-                      onClick={handleCancelOrder}
-                      className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition flex items-center"
-                    >
-                      <FaTimes className="mr-2" />
-                      Hủy
-                    </button>
-                  </>
                 )}
-                <button
-                  onClick={handleCloseOrderDetail}
-                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
-                >
-                  Đóng
-                </button>
+
+                {/* Material Tags Section */}
+                {selectedOrder.material_tags && (() => {
+                  try {
+                    const tags = JSON.parse(selectedOrder.material_tags);
+                    return Array.isArray(tags) && tags.length > 0;
+                  } catch (error) {
+                    return selectedOrder.material_tags.trim() !== '';
+                  }
+                })() && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                      <h5 className="font-semibold text-green-800 mb-2">Nguyên vật liệu cần mua</h5>
+                      <div className="flex flex-wrap gap-2">
+                        {(() => {
+                          try {
+                            const tags = JSON.parse(selectedOrder.material_tags);
+                            return Array.isArray(tags) ? tags.map((tag, index) => (
+                              <span
+                                key={index}
+                                className="inline-flex items-center px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium"
+                              >
+                                {tag}
+                              </span>
+                            )) : null;
+                          } catch (error) {
+                            return (
+                              <span className="text-gray-600 text-sm">
+                                {selectedOrder.material_tags}
+                              </span>
+                            );
+                          }
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                {/* Customer Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-2">Thông tin khách hàng</h4>
+                    <div className="space-y-1 text-sm">
+                      <p><span className="font-medium">Tên:</span> {selectedOrder.customer_name}</p>
+                      <p><span className="font-medium">SĐT:</span> {selectedOrder.customer_phone}</p>
+                      <p className="break-words"><span className="font-medium">Địa chỉ:</span> {selectedOrder.customer_address || 'Không có'}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-2">Thời gian giao hàng</h4>
+                    <div className="space-y-1 text-sm">
+                      <p><span className="font-medium">Ngày:</span> {new Date(selectedOrder.delivery_date).toLocaleDateString('vi-VN')}</p>
+                      <p><span className="font-medium">Giờ:</span> {selectedOrder.delivery_time}</p>
+                      <p><span className="font-medium">Trạng thái:</span>
+                        <span className={`ml-2 px-2 py-1 text-xs rounded-full ${getStatusColor(selectedOrder.status)}`}>
+                          {getStatusText(selectedOrder.status)}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Order Items */}
+                <div className="mb-6">
+                  <h4 className="font-semibold text-gray-700 mb-2">Sản phẩm</h4>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Sản phẩm</th>
+                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">SL</th>
+                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Đơn giá</th>
+                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Thành tiền</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {selectedOrderItems.map((item, index) => (
+                          <tr key={index}>
+                            <td className="px-4 py-2 text-sm">{item.product_name}</td>
+                            <td className="px-4 py-2 text-sm text-right">{item.quantity}</td>
+                            <td className="px-4 py-2 text-sm text-right">{Math.round(item.unit_price).toLocaleString('vi-VN')}₫</td>
+                            <td className="px-4 py-2 text-sm font-medium text-right">{Math.round(item.total_price).toLocaleString('vi-VN')}₫</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-gray-50">
+                        <tr>
+                          <td colSpan={3} className="px-4 py-2 text-sm font-medium text-right">Tổng cộng:</td>
+                          <td className="px-4 py-2 text-sm font-bold text-right">{Math.round(selectedOrder.total_amount).toLocaleString('vi-VN')}₫</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 justify-end">
+                  {(selectedOrder.status === 'pending' || selectedOrder.status === 'in_progress') && (
+                    <>
+                      {selectedOrder.status === 'pending' && (
+                        <button
+                          onClick={() => {
+                            updateOrderStatus(selectedOrder.id, 'in_progress');
+                            handleCloseOrderDetail();
+                          }}
+                          className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition flex items-center"
+                        >
+                          <FaShoppingCart className="mr-2" />
+                          Bắt đầu
+                        </button>
+                      )}
+                      <button
+                        onClick={handleCancelOrder}
+                        className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition flex items-center"
+                      >
+                        <FaTimes className="mr-2" />
+                        Hủy
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={handleCloseOrderDetail}
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
+                  >
+                    Đóng
+                  </button>
+                </div>
               </div>
             </div>
           </div>
