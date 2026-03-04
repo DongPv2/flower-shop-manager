@@ -10,5 +10,11 @@
         }
     ],
     "buildCommand": "npm run build",
-    "installCommand": "npm install"
+    "installCommand": "npm install",
+    "rewrites": [
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
+        }
+    ]
 }

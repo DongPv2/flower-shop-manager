@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { FaPlus, FaTrash, FaEdit, FaShoppingCart, FaCheck, FaClock, FaTimes, FaMoneyBillWave, FaEye } from 'react-icons/fa';
+import { FaPlus, FaTrash, FaEdit, FaShoppingCart, FaCheck, FaClock, FaTimes, FaEye } from 'react-icons/fa';
 import { Order, OrderItem } from '../types';
 import { sql } from '../lib/database';
 import { useAuth } from '../context/AuthContext';
@@ -34,8 +34,8 @@ const OrderManager: React.FC = () => {
   const [isPhoneFocused, setIsPhoneFocused] = useState(false);
   const blurTimeoutRef = useRef<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalOrders, setTotalOrders] = useState(0);
-  const itemsPerPage = 20;
+  const [, setTotalOrders] = useState(0);
+  const itemsPerPage = 10;
   const [materialTags, setMaterialTags] = useState<string[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'cancelled'>('all');
@@ -84,12 +84,13 @@ const OrderManager: React.FC = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const overdueOrders = rawOrders.filter(order => isOverdue(order));
-    const todayOrders = rawOrders.filter(order => isToday(order) && !isOverdue(order));
-    const otherOrders = rawOrders.filter(order => !isOverdue(order) && !isToday(order));
+    // Only apply overdue/today grouping when no sort is active
+    if (!sortConfig) {
+      const overdueOrders = rawOrders.filter(order => isOverdue(order));
+      const todayOrders = rawOrders.filter(order => isToday(order) && !isOverdue(order));
+      const otherOrders = rawOrders.filter(order => !isOverdue(order) && !isToday(order));
 
-    const sortOrders = (orders: Order[]) => {
-      if (!sortConfig) {
+      const sortOrders = (orders: Order[]) => {
         return orders.sort((a, b) => {
           const dateCompare =
             new Date(a.delivery_date).getTime() -
@@ -97,45 +98,46 @@ const OrderManager: React.FC = () => {
           if (dateCompare !== 0) return dateCompare;
           return a.delivery_time.localeCompare(b.delivery_time);
         });
+      };
+
+      const sortedOverdue = sortOrders(overdueOrders);
+      const sortedToday = sortOrders(todayOrders);
+      const sortedOthers = sortOrders(otherOrders);
+
+      return [...sortedOverdue, ...sortedToday, ...sortedOthers];
+    }
+
+    // When sorting is active, sort all orders together
+    return rawOrders.sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortConfig.key) {
+        case 'status':
+          aValue = a.status;
+          bValue = b.status;
+          break;
+        case 'customer_name':
+          aValue = a.customer_name;
+          bValue = b.customer_name;
+          break;
+        case 'total_amount':
+          aValue = Number(a.total_amount);
+          bValue = Number(b.total_amount);
+          break;
+        case 'delivery_date':
+          aValue = new Date(a.delivery_date).getTime();
+          bValue = new Date(b.delivery_date).getTime();
+          break;
+        default:
+          aValue = a[sortConfig.key as keyof Order];
+          bValue = b[sortConfig.key as keyof Order];
       }
 
-      return orders.sort((a, b) => {
-        let aValue: any;
-        let bValue: any;
-
-        switch (sortConfig.key) {
-          case 'status':
-            aValue = a.status;
-            bValue = b.status;
-            break;
-          case 'customer_name':
-            aValue = a.customer_name;
-            bValue = b.customer_name;
-            break;
-          case 'total_amount':
-            aValue = Number(a.total_amount);
-            bValue = Number(b.total_amount);
-            break;
-          case 'delivery_date':
-            aValue = new Date(a.delivery_date).getTime();
-            bValue = new Date(b.delivery_date).getTime();
-            break;
-          default:
-            aValue = a[sortConfig.key as keyof Order];
-            bValue = b[sortConfig.key as keyof Order];
-        }
-
-        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    };
-
-    const sortedOverdue = sortOrders(overdueOrders);
-    const sortedToday = sortOrders(todayOrders);
-    const sortedOthers = sortOrders(otherOrders);
-
-    return [...sortedOverdue, ...sortedToday, ...sortedOthers];
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
   }, [sortConfig]);
 
   // Filter orders by status
@@ -819,25 +821,6 @@ const OrderManager: React.FC = () => {
               </div>
             </div>
 
-            {/* Completed */}
-            <div
-              onClick={() => setSelectedStatus('completed')}
-              className={`p-6 rounded-lg border cursor-pointer transition-all ${selectedStatus === 'completed'
-                ? 'bg-green-50 border-green-300 shadow-md'
-                : 'bg-green-50 border-green-200 hover:bg-green-100'
-                }`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-green-600 text-sm font-medium">Hoàn thành</p>
-                  <p className="text-2xl font-bold text-green-700">{statusStats.completed.count}</p>
-                  <p className="text-xs text-green-600 mt-1">
-                    {Math.round(statusStats.completed.total).toLocaleString('vi-VN')}₫
-                  </p>
-                </div>
-                <FaCheck className={`text-3xl ${selectedStatus === 'completed' ? 'text-green-600' : 'text-green-500'}`} />
-              </div>
-            </div>
 
             {/* Cancelled */}
             <div
@@ -856,6 +839,26 @@ const OrderManager: React.FC = () => {
                   </p>
                 </div>
                 <FaTimes className={`text-3xl ${selectedStatus === 'cancelled' ? 'text-red-600' : 'text-red-500'}`} />
+              </div>
+            </div>
+
+            {/* Completed */}
+            <div
+              onClick={() => setSelectedStatus('completed')}
+              className={`p-6 rounded-lg border cursor-pointer transition-all ${selectedStatus === 'completed'
+                ? 'bg-green-50 border-green-300 shadow-md'
+                : 'bg-green-50 border-green-200 hover:bg-green-100'
+                }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-green-600 text-sm font-medium">Hoàn thành</p>
+                  <p className="text-2xl font-bold text-green-700">{statusStats.completed.count}</p>
+                  <p className="text-xs text-green-600 mt-1">
+                    {Math.round(statusStats.completed.total).toLocaleString('vi-VN')}₫
+                  </p>
+                </div>
+                <FaCheck className={`text-3xl ${selectedStatus === 'completed' ? 'text-green-600' : 'text-green-500'}`} />
               </div>
             </div>
           </div>
@@ -1097,23 +1100,11 @@ const OrderManager: React.FC = () => {
       )}
 
       <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-800">
-            {selectedStatus === 'all' && 'Tất cả đơn hàng'}
-            {selectedStatus === 'pending' && 'Đơn hàng chờ xử lý'}
-            {selectedStatus === 'in_progress' && 'Đơn hàng đang thực hiện'}
-            {selectedStatus === 'completed' && 'Đơn hàng hoàn thành'}
-            {selectedStatus === 'cancelled' && 'Đơn hàng đã hủy'}
-          </h3>
-          <p className="text-sm text-gray-600 mt-1">
-            Hiển thị {paginatedOrders.length} / {filteredOrders.length} đơn hàng
-          </p>
-        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Thao tác
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
@@ -1122,8 +1113,8 @@ const OrderManager: React.FC = () => {
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Nguyên vật liệu
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors rounded" onClick={() => handleSort('status')}>
-                  <div className="flex items-center gap-2">
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors rounded" onClick={() => handleSort('status')}>
+                  <div className="flex items-center justify-center gap-2">
                     Trạng thái
                     {sortConfig?.key === 'status' && (
                       <span className="text-blue-600">
@@ -1145,8 +1136,8 @@ const OrderManager: React.FC = () => {
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[200px]">
                   Ghi chú
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors rounded" onClick={() => handleSort('total_amount')}>
-                  <div className="flex items-center gap-2">
+                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors rounded" onClick={() => handleSort('total_amount')}>
+                  <div className="flex items-center justify-end gap-2">
                     Tổng tiền
                     {sortConfig?.key === 'total_amount' && (
                       <span className="text-blue-600">
@@ -1157,13 +1148,13 @@ const OrderManager: React.FC = () => {
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y ">
               {paginatedOrders.map((order) => (
                 <tr
                   key={order.id}
                   className={`hover:bg-gray-50 transition-all duration-200 ${isOverdue(order)
                     ? 'bg-red-50 border-l-4 border-red-500 shadow-sm'
-                    : isToday(order)
+                    : isToday(order) && (order.status === 'pending' || order.status === 'in_progress')
                       ? 'bg-blue-50 border-l-4 border-blue-300'
                       : 'hover:shadow-sm'
                     }`}
@@ -1293,8 +1284,8 @@ const OrderManager: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <div className="flex items-center">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                    <div className="flex items-center justify-end">
                       <span className="text-lg font-bold text-green-600">
                         {Math.round(order.total_amount).toLocaleString('vi-VN')}₫
                       </span>
@@ -1309,26 +1300,15 @@ const OrderManager: React.FC = () => {
 
       {/* Pagination */}
       {filteredOrders.length > itemsPerPage && (
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 mt-6">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-700">
-              <span className="font-medium">Hiển thị</span>
-              <span className="mx-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-semibold">
-                {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredOrders.length)}
-              </span>
-              <span className="font-medium">của</span>
-              <span className="ml-2 px-3 py-1 bg-gray-100 text-gray-700 rounded-full font-semibold">
-                {filteredOrders.length}
-              </span>
-              <span className="font-medium">đơn hàng</span>
-            </div>
-            <div className="flex gap-2">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 sm:p-6 mt-6">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div className="flex flex-wrap items-center justify-center gap-2">
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
+                className="px-3 sm:px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
               >
-                ← Trước
+                ← <span className="hidden sm:inline">Trước</span>
               </button>
 
               {/* Page numbers */}
@@ -1353,12 +1333,12 @@ const OrderManager: React.FC = () => {
                   (page === currentPage + 2 && page < totalPages - 1);
 
                 return isEllipsis ? (
-                  <span key={page} className="px-3 py-2 text-sm text-gray-500">...</span>
+                  <span key={page} className="px-2 sm:px-3 py-2 text-sm text-gray-500">...</span>
                 ) : (
                   <button
                     key={page}
                     onClick={() => setCurrentPage(page)}
-                    className={`px-4 py-2 text-sm font-medium border rounded-lg transition-all duration-200 ${currentPage === page
+                    className={`px-2 sm:px-4 py-2 text-sm font-medium border rounded-lg transition-all duration-200 ${currentPage === page
                       ? 'bg-blue-500 text-white border-blue-500 shadow-md transform scale-105'
                       : 'border-gray-300 hover:bg-gray-50 hover:shadow-sm'
                       }`}
@@ -1371,9 +1351,9 @@ const OrderManager: React.FC = () => {
               <button
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredOrders.length / itemsPerPage)))}
                 disabled={currentPage === Math.ceil(filteredOrders.length / itemsPerPage)}
-                className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
+                className="px-3 sm:px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
               >
-                Sau →
+                <span className="hidden sm:inline">Sau</span> →
               </button>
             </div>
           </div>
