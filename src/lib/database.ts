@@ -132,6 +132,12 @@ export const createTables = async () => {
       ADD COLUMN IF NOT EXISTS material_tags TEXT
     `;
 
+    // Migrate existing orders table to add is_paid column
+    await sql`
+      ALTER TABLE orders
+      ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE
+    `;
+
     // Migrate existing expenses table to add status column (for databases created before this update)
     try {
       await sql`

@@ -47,6 +47,7 @@ export interface Order {
   delivery_time: string;
   total_amount: number;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  is_paid: boolean;
   items: OrderItem[];
   notes?: string;
   material_tags?: string;

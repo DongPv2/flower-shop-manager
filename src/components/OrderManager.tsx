@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { FaPlus, FaTrash, FaEdit, FaShoppingCart, FaCheck, FaClock, FaTimes, FaEye } from 'react-icons/fa';
+import { FaPlus, FaTrash, FaEdit, FaShoppingCart, FaCheck, FaClock, FaTimes, FaEye, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import { Order, OrderItem } from '../types';
 import { sql } from '../lib/database';
 import { useAuth } from '../context/AuthContext';
@@ -39,6 +39,7 @@ const OrderManager: React.FC = () => {
   const [materialTags, setMaterialTags] = useState<string[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'cancelled'>('all');
+  const [dashboardFilter, setDashboardFilter] = useState<{ status?: string; isPaid?: boolean } | null>(null);
 
   // Format price input to Vietnamese format
   const formatPriceInput = (value: string) => {
@@ -140,13 +141,22 @@ const OrderManager: React.FC = () => {
     });
   }, [sortConfig]);
 
-  // Filter orders by status
+  // Filter orders by status and dashboard filter
   const filteredOrders = React.useMemo(() => {
-    if (selectedStatus === 'all') {
-      return orders;
+    let filtered = orders;
+
+    // Apply dashboard filter first (it has priority)
+    if (dashboardFilter && dashboardFilter.status === 'completed' && dashboardFilter.isPaid === false) {
+      filtered = filtered.filter(order => order.status === 'completed' && order.is_paid === false);
+    } else {
+      // Apply normal status filter only if no dashboard filter
+      if (selectedStatus !== 'all') {
+        filtered = filtered.filter(order => order.status === selectedStatus);
+      }
     }
-    return orders.filter(order => order.status === selectedStatus);
-  }, [orders, selectedStatus]);
+
+    return filtered;
+  }, [orders, selectedStatus, dashboardFilter]);
 
   // Get paginated orders for current page
   const paginatedOrders = React.useMemo(() => {
@@ -202,13 +212,18 @@ const OrderManager: React.FC = () => {
           o.id ASC
       `;
 
+      // Ensure is_paid field exists (default to false if not present)
       const processedOrders = processOrders(result as Order[]);
-      setOrders(processedOrders);
+      const ordersWithPayment = processedOrders.map(order => ({
+        ...order,
+        is_paid: order.is_paid || false
+      }));
+
+      setOrders(ordersWithPayment);
 
       // Set total count for pagination
       setTotalOrders((result as Order[]).length);
     } catch (error) {
-      console.error('Error fetching orders:', error);
       setOrders([]);
     } finally {
       setIsLoading(false);
@@ -218,6 +233,27 @@ const OrderManager: React.FC = () => {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  // Listen for dashboard filter events
+  useEffect(() => {
+
+    const handleSetOrderFilter = (event: Event) => {
+      const filter = (event as CustomEvent<{ status?: string; isPaid?: boolean }>).detail;
+      console.log('Dashboard filter received:', filter);
+      setDashboardFilter(filter);
+
+      // Update status filter based on dashboard filter
+      if (filter.status === 'completed') {
+        setSelectedStatus('completed');
+      }
+    };
+
+    window.addEventListener('setOrderFilter', handleSetOrderFilter);
+
+    return () => {
+      window.removeEventListener('setOrderFilter', handleSetOrderFilter);
+    };
+  }, []);
 
   // Reset to first page when status filter changes
   useEffect(() => {
@@ -426,8 +462,8 @@ const OrderManager: React.FC = () => {
         }, 0);
       } else {
         const orderResult = await sql`
-          INSERT INTO orders (customer_name, customer_phone, customer_address, delivery_date, delivery_time, total_amount, status, notes, material_tags, user_id)
-          VALUES (${formData.customer_name}, ${formData.customer_phone}, ${formData.customer_address}, ${formData.delivery_date}, ${formData.delivery_time}, ${totalAmount}, 'pending', ${formData.notes}, ${JSON.stringify(materialTags)}, ${user.id})
+          INSERT INTO orders (customer_name, customer_phone, customer_address, delivery_date, delivery_time, total_amount, status, is_paid, notes, material_tags, user_id)
+          VALUES (${formData.customer_name}, ${formData.customer_phone}, ${formData.customer_address}, ${formData.delivery_date}, ${formData.delivery_time}, ${totalAmount}, 'pending', false, ${formData.notes}, ${JSON.stringify(materialTags)}, ${user.id})
           RETURNING id
         `;
 
@@ -596,7 +632,7 @@ const OrderManager: React.FC = () => {
       }
 
       setTimeout(() => {
-        toast.success('Xóa đơn hàng thành công! 🗑️');
+        toast.success('Xóa đơn hàng thành công!');
       }, 0);
     }
   };
@@ -615,9 +651,9 @@ const OrderManager: React.FC = () => {
 
       // If completed, just notify (revenue is calculated from completed orders)
       if (status === 'completed') {
-        toast.success('Đơn hàng hoàn thành! ✅');
+        toast.success('Đơn hàng hoàn thành!');
       } else {
-        toast.success(`Cập nhật trạng thái đơn hàng thành công! 📦`);
+        toast.success(`Cập nhật trạng thái đơn hàng thành công!`);
       }
 
       fetchOrders();
@@ -635,6 +671,22 @@ const OrderManager: React.FC = () => {
     }
   };
 
+  const togglePaymentStatus = async (orderId: string) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    try {
+      const newPaymentStatus = !order.is_paid;
+      await sql`UPDATE orders SET is_paid = ${newPaymentStatus}, updated_at = CURRENT_TIMESTAMP WHERE id = ${orderId}`;
+
+      toast.success(`Cập nhật trạng thái thanh toán thành công!`);
+      fetchOrders();
+    } catch (error) {
+      console.error('Error toggling payment status:', error);
+      toast.error('Lỗi khi cập nhật trạng thái thanh toán. Vui lòng thử lại. ❌');
+    }
+  };
+
   const addOrderItem = () => {
     if (!newItem.name || !newItem.price) {
       toast.error('Vui lòng nhập tên và giá sản phẩm ❌');
@@ -643,11 +695,15 @@ const OrderManager: React.FC = () => {
 
     // Parse formatted price (remove dots and convert to number)
     const cleanPrice = newItem.price.replace(/\D/g, '');
-    const unitPrice = parseInt(cleanPrice);
+    let unitPrice = parseInt(cleanPrice);
 
     if (unitPrice <= 0) {
       toast.error('Giá sản phẩm phải lớn hơn 0 ❌');
       return;
+    }
+
+    if (unitPrice < 1000) {
+      unitPrice = unitPrice * 1000;
     }
 
     const existingItem = orderItems.find(item => item.product_name === newItem.name);
@@ -1100,6 +1156,26 @@ const OrderManager: React.FC = () => {
       )}
 
       <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+        <div className="bg-gradient-to-r from-green-50 to-orange-50 px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-800">Quản lý Đơn hàng</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            {dashboardFilter && dashboardFilter.status === 'completed' && dashboardFilter.isPaid === false
+              ? `Hiển thị ${filteredOrders.length} đơn hàng hoàn thành chưa thanh toán`
+              : `Hiển thị ${filteredOrders.length} đơn hàng ${selectedStatus === 'all' ? '' : `trạng thái ${getStatusText(selectedStatus)}`}`
+            }
+          </p>
+          {dashboardFilter && dashboardFilter.status === 'completed' && dashboardFilter.isPaid === false && (
+            <button
+              onClick={() => {
+                setDashboardFilter(null);
+                setSelectedStatus('all');
+              }}
+              className="mt-2 text-sm text-orange-600 hover:text-orange-800 underline"
+            >
+              Xóa bộ lọc
+            </button>
+          )}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
@@ -1123,6 +1199,9 @@ const OrderManager: React.FC = () => {
                     )}
                   </div>
                 </th>
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  Thanh toán
+                </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors rounded" onClick={() => handleSort('delivery_date')}>
                   <div className="flex items-center gap-2">
                     Ngày giao
@@ -1132,9 +1211,6 @@ const OrderManager: React.FC = () => {
                       </span>
                     )}
                   </div>
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[200px]">
-                  Ghi chú
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors rounded" onClick={() => handleSort('total_amount')}>
                   <div className="flex items-center justify-end gap-2">
@@ -1181,23 +1257,27 @@ const OrderManager: React.FC = () => {
                         </button>
                       )}
 
-                      {/* Edit button */}
-                      <button
-                        onClick={() => handleEdit(order)}
-                        className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
-                        title="Sửa"
-                      >
-                        <FaEdit />
-                      </button>
+                      {/* Edit button - only admin or order owner */}
+                      {(user?.role === 'admin' || order.user_id === user?.id) && (
+                        <button
+                          onClick={() => handleEdit(order)}
+                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
+                          title="Sửa"
+                        >
+                          <FaEdit />
+                        </button>
+                      )}
 
-                      {/* Delete button */}
-                      <button
-                        onClick={() => handleDelete(order.id)}
-                        className="text-red-600 hover:text-red-800 hover:bg-red-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
-                        title="Xóa"
-                      >
-                        <FaTrash />
-                      </button>
+                      {/* Delete button - only for non-completed orders and admin/owner */}
+                      {order.status !== 'completed' && (user?.role === 'admin' || order.user_id === user?.id) && (
+                        <button
+                          onClick={() => handleDelete(order.id)}
+                          className="text-red-600 hover:text-red-800 hover:bg-red-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
+                          title="Xóa"
+                        >
+                          <FaTrash />
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -1260,6 +1340,18 @@ const OrderManager: React.FC = () => {
                       <span className="ml-1.5">{getStatusText(order.status)}</span>
                     </span>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                    <button
+                      onClick={() => togglePaymentStatus(order.id)}
+                      className={`inline-flex items-center justify-center w-10 h-10 rounded-full text-lg font-bold transition-all duration-200 hover:scale-110 ${order.is_paid
+                        ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                        : 'bg-red-100 text-red-600 hover:bg-red-200'
+                        }`}
+                      title={order.is_paid ? 'Đã thanh toán (Click để đổi)' : 'Chưa thanh toán (Click để đổi)'}
+                    >
+                      {order.is_paid ? <FaCheckCircle /> : <FaExclamationCircle />}
+                    </button>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <div className="flex flex-col">
                       <div className="font-semibold text-gray-900">
@@ -1267,20 +1359,6 @@ const OrderManager: React.FC = () => {
                       </div>
                       <div className="text-xs text-gray-500">
                         {order.delivery_time}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    <div className="max-w-[150px]" title={order.notes || ''}>
-                      <div style={{
-                        display: '-webkit-box',
-                        WebkitLineClamp: 3,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        lineHeight: '1.5'
-                      }}>
-                        {order.notes || <span className="text-gray-400 italic">Không có ghi chú</span>}
                       </div>
                     </div>
                   </td>

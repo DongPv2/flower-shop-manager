@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaMoneyBillWave, FaChartLine, FaShoppingCart, FaSignOutAlt, FaClock, FaCheck } from 'react-icons/fa';
+import { FaMoneyBillWave, FaChartLine, FaShoppingCart, FaSignOutAlt, FaClock, FaCheck, FaDollarSign } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import { Expense } from '../types';
 import { Order } from '../types';
@@ -102,6 +102,32 @@ const Dashboard: React.FC = () => {
   const inProgressOrders = orders.filter(o => o.status === 'in_progress').length;
   const completedOrders = orders.filter(o => o.status === 'completed').length;
 
+  // Payment status calculations
+  const paidOrders = orders.filter(o => o.is_paid === true);
+  const completedUnpaidOrders = orders.filter(o => o.status === 'completed' && o.is_paid === false);
+  const paidOrdersAmount = paidOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+  const completedUnpaidOrdersAmount = completedUnpaidOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+
+  // Handle navigation to orders tab with filter
+  const handleNavigateToOrders = (filterType?: 'completed-unpaid') => {
+    setActiveTab('orders');
+
+    // Store filter state for OrderManager to use
+    if (filterType === 'completed-unpaid') {
+      // Add small delay to ensure OrderManager component is mounted
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('setOrderFilter', {
+          detail: {
+            status: 'completed',
+            isPaid: false
+          }
+        }));
+      }, 100);
+    }
+
+
+  };
+
   const DashboardView = () => (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -144,40 +170,40 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
+      {/* Payment Status Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div
+          className="bg-emerald-50 p-6 rounded-lg border hover:bg-emerald-100 transition-colors"
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-yellow-600 text-sm font-medium">Đơn hàng chờ xử lý</p>
-              <p className="text-2xl font-bold text-yellow-700">
-                {pendingOrders}
+              <p className="text-emerald-600 text-sm font-medium">Đơn hàng đã thanh toán</p>
+              <p className="text-2xl font-bold text-emerald-700">
+                {paidOrders.length}
+              </p>
+              <p className="text-sm text-emerald-600 mt-1">
+                Tổng: {paidOrdersAmount.toLocaleString('vi-VN')}₫
               </p>
             </div>
-            <FaClock className="text-3xl text-yellow-500" />
+            <FaDollarSign className="text-3xl text-emerald-500" />
           </div>
         </div>
 
-        <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
+        <div
+          className="bg-orange-50 p-6 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100 transition-colors"
+          onClick={() => handleNavigateToOrders('completed-unpaid')}
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-blue-600 text-sm font-medium">Đơn hàng đang làm</p>
-              <p className="text-2xl font-bold text-blue-700">
-                {inProgressOrders}
+              <p className="text-orange-600 text-sm font-medium">Hoàn thành chưa thanh toán</p>
+              <p className="text-2xl font-bold text-orange-700">
+                {completedUnpaidOrders.length}
+              </p>
+              <p className="text-sm text-orange-600 mt-1">
+                Tổng: {completedUnpaidOrdersAmount.toLocaleString('vi-VN')}₫
               </p>
             </div>
-            <FaShoppingCart className="text-3xl text-blue-500" />
-          </div>
-        </div>
-
-        <div className="bg-green-50 p-6 rounded-lg border border-green-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-green-600 text-sm font-medium">Đơn hàng hoàn thành</p>
-              <p className="text-2xl font-bold text-green-700">
-                {completedOrders}
-              </p>
-            </div>
-            <FaCheck className="text-3xl text-green-500" />
+            <FaClock className="text-3xl text-orange-500" />
           </div>
         </div>
       </div>

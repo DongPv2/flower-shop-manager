@@ -2,10 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FaTimes, FaPlus } from 'react-icons/fa';
 
 const MATERIAL_TAGS = [
-  "Hoa hồng", "Tú cầu", "Mao lương", "Hoa cúc", "Lan hồ điệp",
-  "Giấy gói", "Ruy băng", "Lá cây", "Lưới hoa", "Kẽm hoa",
-  "Bọt nước", "Hộp carton", "Thẻ cảm ơn", "Vải lụa", "Kim chỉ",
-  "Dây cước", "Mút xốp", "Túi nilon", "Nơ", "Cát cảnh"
+  "Mao lương", "Tulip"
 ];
 
 interface MaterialTagSelectorProps {
