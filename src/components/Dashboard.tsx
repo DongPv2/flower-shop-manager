@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaMoneyBillWave, FaChartLine, FaShoppingCart, FaSignOutAlt, FaClock, FaCheck, FaDollarSign } from 'react-icons/fa';
+import { FaMoneyBillWave, FaChartLine, FaShoppingCart, FaSignOutAlt, FaClock, FaDollarSign } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import { Expense } from '../types';
 import { Order } from '../types';
@@ -98,9 +98,6 @@ const Dashboard: React.FC = () => {
   const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
   const totalRevenues = orders.filter(o => o.status === 'completed').reduce((sum, o) => sum + Number(o.total_amount), 0);
   const profit = totalRevenues - totalExpenses;
-  const pendingOrders = orders.filter(o => o.status === 'pending').length;
-  const inProgressOrders = orders.filter(o => o.status === 'in_progress').length;
-  const completedOrders = orders.filter(o => o.status === 'completed').length;
 
   // Payment status calculations
   const paidOrders = orders.filter(o => o.is_paid === true);
