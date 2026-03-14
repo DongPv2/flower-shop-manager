@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { FaPlus, FaTrash, FaEdit, FaMoneyBillWave, FaCheck, FaClock, FaUndo, FaTimes } from 'react-icons/fa';
 import { Expense } from '../types';
 import { sql } from '../lib/database';
@@ -25,11 +25,11 @@ const ExpenseManager: React.FC = () => {
   });
 
   // Format price input to Vietnamese format
-  const formatPriceInput = (value: string) => {
+  const formatPriceInput = useCallback((value: string) => {
     const cleanValue = value.replace(/\D/g, '');
     if (cleanValue === '') return '';
     return parseInt(cleanValue).toLocaleString('vi-VN');
-  };
+  }, []);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formattedValue = formatPriceInput(e.target.value);
@@ -45,13 +45,7 @@ const ExpenseManager: React.FC = () => {
     'Hoa tươi',
     'Khác'
   ];
-
-  useEffect(() => {
-    fetchExpenses();
-    fetchUsers();
-  }, []);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const result = await sql`
         SELECT id, name, role 
@@ -63,23 +57,27 @@ const ExpenseManager: React.FC = () => {
     } catch (error) {
       console.error('Error fetching users:', error);
     }
-  };
+  }, []);
 
-  const fetchExpenses = async () => {
+  const fetchExpenses = useCallback(async () => {
     try {
       const result = await sql`
-        SELECT e.*, u.name as user_name
-        FROM expenses e
-        LEFT JOIN users u ON e.user_id = u.id
-        ORDER BY e.created_at DESC
-      `;
+      SELECT e.*, u.name as user_name
+      FROM expenses e
+      LEFT JOIN users u ON e.user_id = u.id
+      ORDER BY e.created_at DESC
+    `;
       setExpenses(result as any[]);
     } catch (error) {
       console.error('Error fetching expenses:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+  useEffect(() => {
+    fetchExpenses();
+    fetchUsers();
+  }, [fetchUsers, fetchExpenses]);
 
   const handlePayment = async (expenseId: string) => {
     if (user?.role !== 'accountant' && user?.role !== 'admin') {
@@ -287,7 +285,7 @@ const ExpenseManager: React.FC = () => {
     });
   };
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData({
       amount: '',
       category: '',
@@ -297,7 +295,7 @@ const ExpenseManager: React.FC = () => {
     });
     setEditingExpense(null);
     setShowForm(false);
-  };
+  }, [user]);
 
   // Handle backdrop click to close modal
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
