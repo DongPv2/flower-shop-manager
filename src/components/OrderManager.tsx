@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { FaPlus, FaTrash, FaEdit, FaShoppingCart, FaCheck, FaClock, FaTimes, FaEye, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
+import { FaPlus, FaTrash, FaEdit, FaShoppingCart, FaCheck, FaClock, FaTimes, FaEye, FaCheckCircle, FaExclamationCircle, FaCopy } from 'react-icons/fa';
 import { Order, OrderItem } from '../types';
 import { sql } from '../lib/database';
 import { useAuth } from '../context/AuthContext';
@@ -262,7 +262,7 @@ const OrderManager: React.FC = () => {
 
   // Lock body scroll when modal is open
   useEffect(() => {
-    if (selectedOrder) {
+    if (selectedOrder || showForm) {
       document.body.style.overflow = 'hidden';
       document.body.style.paddingRight = '0px'; // Prevent layout shift
     } else {
@@ -275,7 +275,26 @@ const OrderManager: React.FC = () => {
       document.body.style.overflow = '';
       document.body.style.paddingRight = '';
     };
-  }, [selectedOrder]);
+  }, [selectedOrder, showForm]);
+
+  // Handle escape key to close modals
+  useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showForm) {
+          resetForm();
+        }
+        if (selectedOrder) {
+          handleCloseOrderDetail();
+        }
+      }
+    };
+
+    if (showForm || selectedOrder) {
+      document.addEventListener('keydown', handleEscapeKey);
+      return () => document.removeEventListener('keydown', handleEscapeKey);
+    }
+  }, [showForm, selectedOrder]);
 
   useEffect(() => {
     const phone = (formData.customer_phone || '').trim();
@@ -763,6 +782,30 @@ const OrderManager: React.FC = () => {
     setShowForm(true);
   };
 
+  // Handle backdrop click to close modal
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      resetForm();
+    }
+  };
+
+  // Copy to clipboard function
+  const copyToClipboard = async (text: string, fieldName: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`Đã sao chép ${fieldName}! 📋`);
+    } catch (error) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      toast.success(`Đã sao chép ${fieldName}! 📋`);
+    }
+  };
+
   const getStatusIcon = (status: Order['status']) => {
     switch (status) {
       case 'pending': return <FaClock className="text-yellow-500" />;
@@ -921,237 +964,255 @@ const OrderManager: React.FC = () => {
         </div>
       )}
 
+      {/* Order Add/Edit Modal - Move outside space-y-6 container */}
       {showForm && (
-        <div className="bg-white p-6 rounded-lg border">
-          <h3 className="text-lg font-semibold mb-4">
-            {editingOrder ? 'Sửa đơn hàng' : 'Thêm đơn hàng mới'}
-          </h3>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Số điện thoại
-                </label>
-                <div className="relative">
-                  <input
-                    type="tel"
-                    value={formData.customer_phone}
-                    onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
-                    onFocus={() => {
-                      if (blurTimeoutRef.current) {
-                        clearTimeout(blurTimeoutRef.current);
-                        blurTimeoutRef.current = null;
-                      }
-                      setIsPhoneFocused(true);
-                    }}
-                    onBlur={() => {
-                      blurTimeoutRef.current = window.setTimeout(() => {
-                        setIsPhoneFocused(false);
-                        blurTimeoutRef.current = null;
-                      }, 200);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="Số điện thoại (không bắt buộc)"
-                    autoComplete="off"
-                  />
-
-                  {phoneSuggestions.length > 0 && isPhoneFocused && (
-                    <div className="absolute z-10 mt-1 w-full bg-white border rounded-lg shadow-lg overflow-hidden">
-                      {phoneSuggestions.map((s) => (
-                        <button
-                          key={s.phone}
-                          type="button"
-                          onClick={() => handleSelectPhoneSuggestion(s)}
-                          className="w-full text-left px-3 py-2 hover:bg-gray-50"
-                        >
-                          <div className="text-sm font-medium text-gray-900">{s.phone}</div>
-                          <div className="text-xs text-gray-500 truncate">
-                            {(s.name || 'Không có tên')}{s.address ? ` • ${s.address}` : ''}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tên khách hàng
-                </label>
-                <input
-                  type="text"
-                  value={formData.customer_name}
-                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Tên khách hàng"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Địa chỉ giao hàng
-                </label>
-                <input
-                  type="text"
-                  value={formData.customer_address}
-                  onChange={(e) => setFormData({ ...formData, customer_address: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Địa chỉ giao hàng"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ngày giao hàng
-                </label>
-                <input
-                  type="date"
-                  value={formData.delivery_date}
-                  onChange={(e) => setFormData({ ...formData, delivery_date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Thời gian giao hàng
-                </label>
-                <input
-                  type="time"
-                  value={formData.delivery_time}
-                  onChange={(e) => setFormData({ ...formData, delivery_time: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ghi chú
-                </label>
-                <input
-                  type="text"
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Ghi chú (không bắt buộc)"
-                />
-              </div>
-            </div>
-
-            {/* Material Tags Section */}
-            <div className="border-t pt-4">
-              <MaterialTagSelector
-                selectedTags={materialTags}
-                onChange={setMaterialTags}
-              />
-            </div>
-
-            {/* Products Section */}
-            <div className="border-t pt-4">
-              <h4 className="font-medium mb-3">Thêm sản phẩm vào đơn hàng</h4>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
-                <input
-                  type="text"
-                  value={newItem.name}
-                  onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Tên sản phẩm"
-                />
-                <input
-                  type="text"
-                  value={newItem.price}
-                  onChange={handlePriceChange}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="100.000"
-                />
-                <input
-                  type="number"
-                  value={newItem.quantity}
-                  onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value) })}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Số lượng"
-                  min="1"
-                  required
-                />
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden !mt-0"
+          onClick={handleBackdropClick}
+        >
+          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {editingOrder ? 'Sửa đơn hàng' : 'Thêm đơn hàng mới'}
+                </h3>
                 <button
-                  type="button"
-                  onClick={addOrderItem}
-                  className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition"
+                  onClick={resetForm}
+                  className="text-gray-400 hover:text-gray-600"
                 >
-                  Thêm
+                  <FaTimes className="text-xl" />
                 </button>
               </div>
-            </div>
 
-            {/* Order Items */}
-            {orderItems.length > 0 && (
-              <div className="border-t pt-4">
-                <h4 className="font-medium mb-3">Sản phẩm trong đơn hàng</h4>
-                <div className="space-y-2">
-                  {orderItems.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded">
-                      <div className="flex-1">
-                        <div className="font-medium">{item.product_name}</div>
-                        <div className="text-sm text-gray-600">
-                          {item.unit_price.toLocaleString('vi-VN')}₫ x {item.quantity || 0}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
+              <div className="overflow-y-auto max-h-[calc(90vh-8rem)]">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Số điện thoại
+                      </label>
+                      <div className="relative">
                         <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => updateOrderItemQuantity(index, parseInt(e.target.value))}
-                          className="w-16 px-2 py-1 border rounded text-center"
-                          min="1"
-                          required
+                          type="tel"
+                          value={formData.customer_phone}
+                          onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
+                          onFocus={() => {
+                            if (blurTimeoutRef.current) {
+                              clearTimeout(blurTimeoutRef.current);
+                              blurTimeoutRef.current = null;
+                            }
+                            setIsPhoneFocused(true);
+                          }}
+                          onBlur={() => {
+                            blurTimeoutRef.current = window.setTimeout(() => {
+                              setIsPhoneFocused(false);
+                              blurTimeoutRef.current = null;
+                            }, 200);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          placeholder="Số điện thoại (không bắt buộc)"
+                          autoComplete="off"
                         />
-                        <div className="font-medium w-24 text-right">
-                          {Math.round(item.total_price).toLocaleString('vi-VN')}₫
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeOrderItem(index)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <FaTrash />
-                        </button>
+
+                        {phoneSuggestions.length > 0 && isPhoneFocused && (
+                          <div className="absolute z-10 mt-1 w-full bg-white border rounded-lg shadow-lg overflow-hidden">
+                            {phoneSuggestions.map((s) => (
+                              <button
+                                key={s.phone}
+                                type="button"
+                                onClick={() => handleSelectPhoneSuggestion(s)}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                              >
+                                <div className="text-sm font-medium text-gray-900">{s.phone}</div>
+                                <div className="text-xs text-gray-500 truncate">
+                                  {(s.name || 'Không có tên')}{s.address ? ` • ${s.address}` : ''}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-3 pt-3 border-t">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">Tổng cộng:</span>
-                    <span className="text-xl font-bold text-green-600">
-                      {totalAmount.toLocaleString('vi-VN')}₫
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition"
-              >
-                {editingOrder ? 'Cập nhật' : 'Thêm'}
-              </button>
-              <button
-                type="button"
-                onClick={resetForm}
-                className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
-              >
-                Hủy
-              </button>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Tên khách hàng
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.customer_name}
+                        onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        placeholder="Tên khách hàng"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Địa chỉ giao hàng
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.customer_address}
+                        onChange={(e) => setFormData({ ...formData, customer_address: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        placeholder="Địa chỉ giao hàng"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Ngày giao hàng
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.delivery_date}
+                        onChange={(e) => setFormData({ ...formData, delivery_date: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Thời gian giao hàng
+                      </label>
+                      <input
+                        type="time"
+                        value={formData.delivery_time}
+                        onChange={(e) => setFormData({ ...formData, delivery_time: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Ghi chú
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.notes}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        placeholder="Ghi chú (không bắt buộc)"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Material Tags Section */}
+                  <div className="border-t pt-4">
+                    <MaterialTagSelector
+                      selectedTags={materialTags}
+                      onChange={setMaterialTags}
+                    />
+                  </div>
+
+                  {/* Products Section */}
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium mb-3">Thêm sản phẩm vào đơn hàng</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
+                      <input
+                        type="text"
+                        value={newItem.name}
+                        onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        placeholder="Tên sản phẩm"
+                      />
+                      <input
+                        type="text"
+                        value={newItem.price}
+                        onChange={handlePriceChange}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        placeholder="100.000"
+                      />
+                      <input
+                        type="number"
+                        value={newItem.quantity}
+                        onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value) })}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        placeholder="Số lượng"
+                        min="1"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={addOrderItem}
+                        className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition"
+                      >
+                        Thêm
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Order Items */}
+                  {orderItems.length > 0 && (
+                    <div className="border-t pt-4">
+                      <h4 className="font-medium mb-3">Sản phẩm trong đơn hàng</h4>
+                      <div className="space-y-2">
+                        {orderItems.map((item, index) => (
+                          <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                            <div className="flex-1">
+                              <div className="font-medium">{item.product_name}</div>
+                              <div className="text-sm text-gray-600">
+                                {item.unit_price.toLocaleString('vi-VN')}₫ x {item.quantity || 0}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => updateOrderItemQuantity(index, parseInt(e.target.value))}
+                                className="w-16 px-2 py-1 border rounded text-center"
+                                min="1"
+                                required
+                              />
+                              <div className="font-medium w-24 text-right">
+                                {Math.round(item.total_price).toLocaleString('vi-VN')}₫
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeOrderItem(index)}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <FaTrash />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 pt-3 border-t">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">Tổng cộng:</span>
+                          <span className="text-xl font-bold text-green-600">
+                            {totalAmount.toLocaleString('vi-VN')}₫
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button
+                      type="submit"
+                      className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition"
+                    >
+                      {editingOrder ? 'Cập nhật' : 'Thêm'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
-          </form>
+          </div>
         </div>
       )}
 
@@ -1440,7 +1501,7 @@ const OrderManager: React.FC = () => {
 
       {/* Order Detail Modal */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden !mt-0">
           <div className="bg-white rounded-lg w-full max-h-[90vh] overflow-hidden">
             <div className="p-6">
               <div className="flex justify-between items-start mb-4">
@@ -1505,8 +1566,30 @@ const OrderManager: React.FC = () => {
                     <h4 className="font-semibold text-gray-700 mb-2">Thông tin khách hàng</h4>
                     <div className="space-y-1 text-sm">
                       <p><span className="font-medium">Tên:</span> {selectedOrder.customer_name}</p>
-                      <p><span className="font-medium">SĐT:</span> {selectedOrder.customer_phone}</p>
-                      <p className="break-words"><span className="font-medium">Địa chỉ:</span> {selectedOrder.customer_address || 'Không có'}</p>
+                      <div className="flex items-center justify-between">
+                        <p><span className="font-medium">SĐT:</span> {selectedOrder.customer_phone}</p>
+                        {selectedOrder.customer_phone && (
+                          <button
+                            onClick={() => copyToClipboard(selectedOrder.customer_phone, 'số điện thoại')}
+                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
+                            title="Sao chép SĐT"
+                          >
+                            <FaCopy />
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="break-words"><span className="font-medium">Địa chỉ:</span> {selectedOrder.customer_address || 'Không có'}</p>
+                        {selectedOrder.customer_address && (
+                          <button
+                            onClick={() => copyToClipboard(selectedOrder.customer_address, 'địa chỉ')}
+                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
+                            title="Sao chép địa chỉ"
+                          >
+                            <FaCopy />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div>
@@ -1593,7 +1676,7 @@ const OrderManager: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </div >
   );
 };
 

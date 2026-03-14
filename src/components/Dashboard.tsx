@@ -121,56 +121,61 @@ const Dashboard: React.FC = () => {
         }));
       }, 100);
     }
-
-
   };
 
   const DashboardView = () => (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-green-50 p-6 rounded-lg border border-green-200">
+        <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-xl border border-green-200 shadow-lg hover:shadow-xl transition-all duration-300">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-green-600 text-sm font-medium">Tổng Doanh thu</p>
-              <p className="text-2xl font-bold text-green-700">
+              <p className="text-green-600 text-sm font-medium">Doanh thu</p>
+              <p className="text-3xl font-bold text-green-700">
                 {totalRevenues.toLocaleString('vi-VN')}₫
               </p>
-            </div>
-            <FaChartLine className="text-3xl text-green-500" />
-          </div>
-        </div>
-
-        <div className="bg-red-50 p-6 rounded-lg border border-red-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-red-600 text-sm font-medium">Tổng Chi tiêu</p>
-              <p className="text-2xl font-bold text-red-700">
-                {totalExpenses.toLocaleString('vi-VN')}₫
+              <p className="text-xs text-green-600 mt-1">
+                {new Date().toLocaleDateString('vi-VN')}
               </p>
             </div>
-            <FaMoneyBillWave className="text-3xl text-red-500" />
+            <FaMoneyBillWave className="text-4xl text-green-500" />
           </div>
         </div>
 
-        <div className={`${profit >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'} p-6 rounded-lg border`}>
+        <div className="bg-gradient-to-br from-red-50 to-orange-50 p-6 rounded-xl border border-red-200 shadow-lg hover:shadow-xl transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-600 text-sm font-medium">Chi tiêu</p>
+              <p className="text-3xl font-bold text-red-700">
+                {totalExpenses.toLocaleString('vi-VN')}₫
+              </p>
+              <p className="text-xs text-red-600 mt-1">
+                {new Date().toLocaleDateString('vi-VN')}
+              </p>
+            </div>
+            <FaChartLine className="text-4xl text-red-500" />
+          </div>
+        </div>
+
+        <div className={`${profit >= 0 ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200' : 'bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200'} p-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300`}>
           <div className="flex items-center justify-between">
             <div>
               <p className={`${profit >= 0 ? 'text-blue-600' : 'text-orange-600'} text-sm font-medium`}>
                 Lợi nhuận
               </p>
-              <p className={`text-2xl font-bold ${profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
+              <p className={`text-3xl font-bold ${profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
                 {profit.toLocaleString('vi-VN')}₫
               </p>
             </div>
-            <FaShoppingCart className={`text-3xl ${profit >= 0 ? 'text-blue-500' : 'text-orange-500'}`} />
+            <div className={`${profit >= 0 ? 'text-blue-500' : 'text-orange-500'} transition-colors duration-300`}>
+              {profit >= 0 ? <FaShoppingCart className="text-3xl" /> : <FaMoneyBillWave className="text-3xl" />}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Payment Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div
-          className="bg-emerald-50 p-6 rounded-lg border hover:bg-emerald-100 transition-colors"
+          className="bg-gradient-to-br from-emerald-50 to-green-50 p-6 rounded-xl border border-emerald-200 shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-emerald-100"
         >
           <div className="flex items-center justify-between">
             <div>
@@ -187,7 +192,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div
-          className="bg-orange-50 p-6 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100 transition-colors"
+          className="bg-gradient-to-br from-orange-50 to-amber-50 p-6 rounded-xl border border-orange-200 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer hover:bg-orange-100"
           onClick={() => handleNavigateToOrders('completed-unpaid')}
         >
           <div className="flex items-center justify-between">
@@ -268,46 +273,46 @@ const Dashboard: React.FC = () => {
           <div className="inline-flex gap-1 min-w-max whitespace-nowrap">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`shrink-0 py-2 px-4 rounded-md transition ${activeTab === 'dashboard'
-                ? 'bg-pink-500 text-white'
-                : 'text-gray-600 hover:text-gray-900'
+              className={`shrink-0 py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 ${activeTab === 'dashboard'
+                ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-lg'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
             >
-              Tổng quan
+              <span className="font-semibold">Tổng quan</span>
             </button>
             <button
               onClick={() => setActiveTab('orders')}
-              className={`shrink-0 py-2 px-4 rounded-md transition ${activeTab === 'orders'
-                ? 'bg-pink-500 text-white'
-                : 'text-gray-600 hover:text-gray-900'
+              className={`shrink-0 py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 ${activeTab === 'orders'
+                ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-lg'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
             >
-              Đơn hàng
+              <span className="font-semibold">Đơn hàng</span>
             </button>
             <button
               onClick={() => setActiveTab('expenses')}
-              className={`shrink-0 py-2 px-4 rounded-md transition ${activeTab === 'expenses'
-                ? 'bg-pink-500 text-white'
-                : 'text-gray-600 hover:text-gray-900'
+              className={`shrink-0 py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 ${activeTab === 'expenses'
+                ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-lg'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
             >
-              Chi tiêu
+              <span className="font-semibold">Chi tiêu</span>
             </button>
             <button
               onClick={() => setActiveTab('customers')}
-              className={`shrink-0 py-2 px-4 rounded-md transition ${activeTab === 'customers'
-                ? 'bg-pink-500 text-white'
-                : 'text-gray-600 hover:text-gray-900'
+              className={`shrink-0 py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 ${activeTab === 'customers'
+                ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-lg'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
             >
-              Khách hàng
+              <span className="font-semibold">Khách hàng</span>
             </button>
             {user?.role === 'admin' && (
               <button
                 onClick={() => setActiveTab('users')}
-                className={`shrink-0 py-2 px-4 rounded-md transition ${activeTab === 'users'
-                  ? 'bg-pink-500 text-white'
-                  : 'text-gray-600 hover:text-gray-900'
+                className={`shrink-0 py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 ${activeTab === 'users'
+                  ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-lg'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                   }`}
               >
                 Tài khoản

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaPlus, FaTrash, FaEdit, FaMoneyBillWave, FaCheck, FaClock, FaUndo } from 'react-icons/fa';
+import { FaPlus, FaTrash, FaEdit, FaMoneyBillWave, FaCheck, FaClock, FaUndo, FaTimes } from 'react-icons/fa';
 import { Expense } from '../types';
 import { sql } from '../lib/database';
 import { useAuth } from '../context/AuthContext';
@@ -299,6 +299,27 @@ const ExpenseManager: React.FC = () => {
     setShowForm(false);
   };
 
+  // Handle backdrop click to close modal
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      resetForm();
+    }
+  };
+
+  // Handle escape key to close modal
+  useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showForm) {
+        resetForm();
+      }
+    };
+
+    if (showForm) {
+      document.addEventListener('keydown', handleEscapeKey);
+      return () => document.removeEventListener('keydown', handleEscapeKey);
+    }
+  }, [showForm, resetForm]);
+
   const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
 
   // Get unique users who have expenses
@@ -372,7 +393,7 @@ const ExpenseManager: React.FC = () => {
           {/* Bulk payment button */}
           {selectedFilterUser && pendingExpensesForUser.length > 0 && (user?.role === 'accountant' || user?.role === 'admin') && (
             <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
                 <div className="text-sm">
                   <p className="font-medium text-green-800">
                     {pendingExpensesForUser.length} khoản chờ thanh toán
@@ -416,107 +437,126 @@ const ExpenseManager: React.FC = () => {
         </div>
       </div>
 
+      {/* Expense Add/Edit Modal */}
       {showForm && (
-        <div className="bg-white p-6 rounded-lg border">
-          <h3 className="text-lg font-semibold mb-4">
-            {editingExpense ? 'Sửa chi tiêu' : 'Thêm chi tiêu mới'}
-          </h3>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Số tiền
-                </label>
-                <input
-                  type="text"
-                  value={formData.amount}
-                  onChange={handleAmountChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  placeholder="Số tiền"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Danh mục
-                </label>
-                <select
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  required
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden !mt-0"
+          onClick={handleBackdropClick}
+        >
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {editingExpense ? 'Sửa chi tiêu' : 'Thêm chi tiêu mới'}
+                </h3>
+                <button
+                  onClick={resetForm}
+                  className="text-gray-400 hover:text-gray-600"
                 >
-                  <option value="">Chọn danh mục</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+                  <FaTimes className="text-xl" />
+                </button>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ngày
-                </label>
-                <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  required
-                />
-              </div>
+              <div className="overflow-y-auto max-h-[calc(90vh-8rem)]">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Số tiền
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.amount}
+                        onChange={handleAmountChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        placeholder="Số tiền"
+                        required
+                      />
+                    </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Mô tả (tùy chọn)
-                </label>
-                <input
-                  type="text"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  placeholder="Mô tả chi tiêu"
-                />
-              </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Danh mục
+                      </label>
+                      <select
+                        value={formData.category}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        required
+                      >
+                        <option value="">Chọn danh mục</option>
+                        {categories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
 
-              {/* User selection - only for admin */}
-              {user?.role === 'admin' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Người chi trả
-                  </label>
-                  <select
-                    value={formData.user_id}
-                    onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  >
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Ngày
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.date}
+                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Mô tả (tùy chọn)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        placeholder="Mô tả chi tiêu"
+                      />
+                    </div>
+
+                    {/* User selection - only for admin */}
+                    {user?.role === 'admin' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Người chi trả
+                        </label>
+                        <select
+                          value={formData.user_id}
+                          onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        >
+                          {users.map(u => (
+                            <option key={u.id} value={u.id}>
+                              {u.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      type="submit"
+                      className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
+                    >
+                      {editingExpense ? 'Cập nhật' : 'Thêm'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
-
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
-              >
-                {editingExpense ? 'Cập nhật' : 'Thêm'}
-              </button>
-              <button
-                type="button"
-                onClick={resetForm}
-                className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
-              >
-                Hủy
-              </button>
-            </div>
-          </form>
+          </div>
         </div>
       )}
 
