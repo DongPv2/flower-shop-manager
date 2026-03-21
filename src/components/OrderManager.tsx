@@ -1566,24 +1566,24 @@ const OrderManager: React.FC = () => {
                     <h4 className="font-semibold text-gray-700 mb-2">Thông tin khách hàng</h4>
                     <div className="space-y-1 text-sm">
                       <p><span className="font-medium">Tên:</span> {selectedOrder.customer_name}</p>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-center">
                         <p><span className="font-medium">SĐT:</span> {selectedOrder.customer_phone}</p>
                         {selectedOrder.customer_phone && (
                           <button
                             onClick={() => copyToClipboard(selectedOrder.customer_phone, 'số điện thoại')}
-                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
+                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 ml-2 rounded-lg transition-all duration-200 flex items-center justify-center"
                             title="Sao chép SĐT"
                           >
                             <FaCopy />
                           </button>
                         )}
                       </div>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-center">
                         <p className="break-words"><span className="font-medium">Địa chỉ:</span> {selectedOrder.customer_address || 'Không có'}</p>
                         {selectedOrder.customer_address && (
                           <button
                             onClick={() => copyToClipboard(selectedOrder.customer_address, 'địa chỉ')}
-                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-all duration-200 flex items-center justify-center"
+                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 ml-2 rounded-lg transition-all duration-200 flex items-center justify-center"
                             title="Sao chép địa chỉ"
                           >
                             <FaCopy />
